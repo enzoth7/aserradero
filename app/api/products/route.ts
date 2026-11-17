@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       ...parseClassification(body),
       heightCm: parseHeightCm(body),
       requiresTreatment: parseRequiresTreatment(body),
-      zetaCode: typeof body.zetaCode === "string" ? body.zetaCode : "",
+      code: typeof body.code === "string" ? body.code : "",
       stockName: typeof body.stockName === "string" ? body.stockName : undefined,
       clientIds: parseClientIds(body.clientIds) ?? [],
     });

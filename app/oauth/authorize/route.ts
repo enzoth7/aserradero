@@ -2,7 +2,7 @@ import { CODE_SECONDS, accessForCode, allowedRedirect, oauthCors, oauthEnabled, 
 
 const page = (body: string, status = 200) => new Response(`<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
-<title>Conectar a Ecoase</title>
+<title>Conectar al control operativo</title>
 <style>
 :root{color-scheme:light dark;--ink:#26343e;--bg:#f4f6f8;--card:#fff;--line:#d5dce2;--yellow:#ffca08;--muted:#5b6a76}
 @media (prefers-color-scheme:dark){:root{--ink:#eef2f5;--bg:#161e24;--card:#1f2a32;--line:#34434e;--muted:#9fb0bc}}
@@ -30,7 +30,7 @@ function check(params: Record<string, string>) {
 }
 
 function form(params: Record<string, string>, clientName: string, error = "") {
-  return page(`<h1>Conectar a Ecoase</h1>
+  return page(`<h1>Conectar al control operativo</h1>
 <p><b>${escape(clientName)}</b> quiere leer y modificar el control operativo (pedidos, producción, logística y stock).</p>
 <form method="post" action="/oauth/authorize" autocomplete="off">
 ${hidden.filter((name) => params[name] !== undefined).map((name) => `<input type="hidden" name="${name}" value="${escape(params[name])}">`).join("")}

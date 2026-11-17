@@ -113,35 +113,11 @@ export function productKey(product: NameShape) {
   return [product.kind.toLowerCase(), normalizeMeasure(product.measure), ...pairs].join("|");
 }
 
-/** Productos anteriores a la planilla, mostrados con los niveles actuales mientras se migra la base. */
-export function attributesFromLegacy(legacy: { model?: string | null; reinforcement?: string | null; board_count?: number | null; quality?: string | null; finish?: string | null; heat_treatment?: string | null; requires_treatment?: boolean }): ProductAttributes {
-  const attributes: ProductAttributes = {};
-  const set = (key: string, value?: string | null) => { if (value?.trim()) attributes[key] = value.trim(); };
-  const model = legacy.model?.trim() ?? "";
-  if (model === "Mercosur · Adium") { set("modelo", "Mercosur"); set("identificacion", "Adium"); }
-  else if (model === "Simple entrada · 5 tacos") { set("modelo", "Simple entrada"); set("taco", "5 tacos"); }
-  else if (model === "Con taco") set("taco", "Con taco");
-  else if (model === "Mercosur 20 mm") set("modelo", "Mercosur 20 mm");
-  else set("modelo", model);
-  const boards = legacy.board_count ? `${legacy.board_count} tablas` : "";
-  set("refuerzo", [legacy.reinforcement?.trim(), boards].filter(Boolean).join(" · "));
-  set("identificacion", legacy.quality);
-  const finish = legacy.finish?.trim().toLocaleLowerCase("es") ?? "";
-  if (finish.includes("Con corte")) set("corte-esquina", "Con corte");
-  else if (finish.includes("Sin corte")) set("corte-esquina", "Sin corte");
-  if (finish.includes("cepillado")) set("terminacion", "Cepillado");
-  else if (finish.includes("rebaje en todas las tablas")) set("terminacion", "Rebaje en todas las tablas del piso");
-  const heat = legacy.heat_treatment?.trim() || (legacy.requires_treatment ? "Con HT" : "Sin HT");
-  if (heat === "Con HT · exportación") set(TREATMENT_LEVEL, "Con HT");
-  else set(TREATMENT_LEVEL, heat);
-  return attributes;
-}
-
 /** Siguiente código numérico libre. */
-export function suggestNextZetaCode(products: Array<Pick<Product, "zetaCode">>) {
+export function suggestNextCode(products: Array<Pick<Product, "code">>) {
   let highest = 0;
   for (const product of products) {
-    const match = product.zetaCode?.match(/(\d+)\s*$/);
+    const match = product.code?.match(/(\d+)\s*$/);
     if (match) highest = Math.max(highest, Number(match[1]));
   }
   return String(highest + 1);

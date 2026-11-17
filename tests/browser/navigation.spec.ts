@@ -10,7 +10,7 @@ test("cambia de sección sin recargar y conserva datos e historial", async ({ pa
 
   await page.goto("/pedidos");
   await expect(page.locator(".orders-surface")).toBeVisible();
-  await page.evaluate(() => Object.defineProperty(window, "__ecoase_navigation_marker", { value: "same-document" }));
+  await page.evaluate(() => Object.defineProperty(window, "__navigation_marker", { value: "same-document" }));
 
   await page.locator('.area-rail a[href="/productos"]').click();
   await expect(page.getByRole("main").getByRole("heading", { level: 2 }).first()).toHaveText("Catálogo");
@@ -30,7 +30,7 @@ test("cambia de sección sin recargar y conserva datos e historial", async ({ pa
   await page.goForward();
   await expect(page).toHaveURL(/\/stock$/);
 
-  expect(await page.evaluate(() => Reflect.get(window, "__ecoase_navigation_marker"))).toBe("same-document");
+  expect(await page.evaluate(() => Reflect.get(window, "__navigation_marker"))).toBe("same-document");
   expect(documentRequests).toHaveLength(1);
   expect(orderRequests).toHaveLength(1);
 });
@@ -67,10 +67,10 @@ test("abre enlaces directos y conserva las vistas antiguas", async ({ page }) =>
 
 test("separa los artículos, los indicadores y las entradas de Stock Pamer", async ({ page }) => {
   const products = [
-    { id: "palbin", stockName: "Artículo general", sourceCatalog: "Palbin", clientNames: [], pending: 4, ready: 7, reserved: 7 },
-    { id: "pamer-original", stockName: "Artículo Pamer histórico", sourceCatalog: "Pamer", clientNames: [], pending: 10, ready: 13, reserved: 3 },
-    { id: "pamer-manual", stockName: "Artículo Pamer nuevo", sourceCatalog: "Manual", clientNames: ["Pamer"], pending: 2, ready: 18, reserved: 0 },
-    { id: "shared", stockName: "Artículo compartido", sourceCatalog: "Manual", clientNames: ["Pamer", "Otro cliente"], pending: 1, ready: 23, reserved: 2 },
+    { id: "general", stockName: "Artículo general", clientNames: [], pending: 4, ready: 7, reserved: 7 },
+    { id: "pamer-original", stockName: "Artículo Pamer histórico", clientNames: ["Pamer"], pending: 10, ready: 13, reserved: 3 },
+    { id: "pamer-manual", stockName: "Artículo Pamer nuevo", clientNames: ["Pamer"], pending: 2, ready: 18, reserved: 0 },
+    { id: "shared", stockName: "Artículo compartido", clientNames: ["Pamer", "Otro cliente"], pending: 1, ready: 23, reserved: 2 },
   ];
   await page.route(/\/api\/stock\/summary(?:\?.*)?$/, (route) => route.fulfill({ json: {
     stock: products.map(({ pending, ready, reserved, ...product }) => {
@@ -183,7 +183,7 @@ test("guarda reglas para el producto de un cliente sin compartirlas con otro", a
     const clientResponse = await request.post("/api/clients", { data: { name } });
     expect(clientResponse.ok()).toBeTruthy();
     const { client } = await clientResponse.json() as { client: { id: string } };
-    const productResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p02" } });
+    const productResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-02" } });
     expect(productResponse.ok()).toBeTruthy();
     const { product } = await productResponse.json() as { product: { id: number | string } };
     return { client, product };

@@ -9,11 +9,11 @@ test("MCP endpoint is present and registers the read-only tools", async () => {
   const initialized = await route.POST(new Request("http://localhost/mcp", {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "ecoase-test", version: "1.0.0" } } }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "mcp-test", version: "1.0.0" } } }),
   }));
   assert.equal(initialized.status, 200);
   const initBody = await initialized.json();
-  assert.equal(initBody.result.serverInfo.name, "ecoase-control-operativo");
+  assert.equal(initBody.result.serverInfo.name, "control-operativo");
 
   const listed = await route.POST(new Request("http://localhost/mcp", {
     method: "POST",

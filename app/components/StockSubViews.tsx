@@ -7,7 +7,7 @@ import { LoadingState } from "./ui";
 const number = new Intl.NumberFormat("es-UY", { maximumFractionDigits: 1 });
 const dateTime = new Intl.DateTimeFormat("es-UY", { dateStyle: "short", timeStyle: "short", timeZone: "America/Montevideo" });
 const movementNames: Record<string, string> = {
-  opening_balance: "Saldo inicial", internal_production: "Producción interna", supplier_receipt: "Recepción de proveedor",
+  internal_production: "Producción interna", supplier_receipt: "Recepción de proveedor",
   production_receipt: "Producción confirmada", treatment_out: "Sale a HT", treatment_in: "HT realizado",
   dispatch: "Despacho", return: "Devolución", waste: "Merma", adjustment: "Ajuste", reversal: "Reversión",
 };
@@ -37,7 +37,7 @@ function useProductDetail(productId: string, revision: number) {
 }
 
 function ProductPicker({ rows, query, onQuery, selectedId, onSelect }: { rows: StockSummaryRow[]; query: string; onQuery: (value: string) => void; selectedId: string; onSelect: (id: string) => void }) {
-  const visible = useMemo(() => rows.filter((row) => `${name(row)} ${row.product.zetaCode ?? row.product.sourceCode ?? ""}`.toLocaleLowerCase("es").includes(query.toLocaleLowerCase("es"))), [rows, query]);
+  const visible = useMemo(() => rows.filter((row) => `${name(row)} ${row.product.code ?? ""}`.toLocaleLowerCase("es").includes(query.toLocaleLowerCase("es"))), [rows, query]);
   return <div className="stock-subview-picker">
     <label className="search-field"><Search size={16} aria-hidden="true" /><span className="sr-only">Buscar producto</span><input type="search" value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Buscar producto o código" /></label>
     <div className="stock-subview-product-list" aria-label="Productos de stock">

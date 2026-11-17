@@ -16,15 +16,14 @@ test("el tratamiento traslada unidades sin cambiar el stock físico", () => {
   assert.equal(balance.pending + balance.ready, 30);
 });
 
-test("el resumen separa confirmados, rechazos y reversiones", () => {
-  const base = { productId: "pallet-1", productName: "Pallet · 120 × 100", performedAt: "2026-08-29T15:00:00.000Z", responsible: "Operación", createdAt: "", checks: [], movements: [] };
+test("el resumen separa confirmados y reversiones", () => {
+  const base = { productId: "pallet-1", productName: "Pallet · 120 × 100", performedAt: "2026-08-29T15:00:00.000Z", responsible: "Operación", createdAt: "", movements: [] };
   const batches = [
     { ...base, id: 1, quantity: 10, status: "posted" },
-    { ...base, id: 2, quantity: 3, status: "rejected" },
-    { ...base, id: 3, quantity: 4, status: "reversal" },
+    { ...base, id: 2, quantity: 4, status: "reversal" },
   ];
   const summary = summarizeTreatmentDay("2026-08-29", batches, new Map([["pallet-1", { pending: 24, ready: 6 }]]));
-  assert.deepEqual(summary, { date: "2026-08-29", processed: 10, rejected: 3, reversed: 4, pending: 24, ready: 6 });
+  assert.deepEqual(summary, { date: "2026-08-29", processed: 10, reversed: 4, pending: 24, ready: 6 });
 });
 
 test("la migración crea un libro inmutable y transacciones atómicas", async () => {
@@ -58,13 +57,12 @@ test("pedidos y productos usan una sola operación canónica", async () => {
   assert.doesNotMatch(view + results, />Registro de marcado</);
 });
 
-test("la pantalla incluye registro en diálogo, controles, evidencia e historial compacto", async () => {
+test("la pantalla incluye registro en diálogo, evidencia e historial compacto, sin puntos de control", async () => {
   const view = (await read("app/TreatmentView.tsx")) + (await read("app/components/TreatmentEntryModal.tsx"));
   const results = await read("app/components/TreatmentResults.tsx");
-  for (const copy of ["Registrar HT", "Puntos de control"]) assert.match(view + results, new RegExp(copy));
+  assert.match(view + results, /Registrar HT/);
   assert.match(view, /primaryAsset/);
-  assert.match(view, /Conforme/);
-  assert.match(view, /No conforme/);
+  assert.doesNotMatch(view + results, /Puntos de control|Conforme|No conforme/);
   assert.match(view, /treatment-entry-modal/);
   assert.match(results, /logistics-real-table/);
 });

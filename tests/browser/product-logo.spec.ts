@@ -33,7 +33,7 @@ test("Logo propio no agrega desplazamiento horizontal en móvil", async ({ page 
 
 test("Catálogo muestra un botón de papelera que conserva la confirmación", async ({ page }) => {
   await page.setViewportSize({ width: 2048, height: 920 });
-  const created = await page.request.post("/api/products", { data: { kind: "Pallet", measure: "120 x 100", zetaCode: String(Date.now()), attributes: { identificacion: "Punto Rojo" } } });
+  const created = await page.request.post("/api/products", { data: { kind: "Pallet", measure: "120 x 100", code: String(Date.now()), attributes: { identificacion: "Punto Rojo" } } });
   expect(created.ok()).toBeTruthy();
   await page.goto("/productos");
   await expect(page.getByRole("heading", { name: "Catálogo" })).toBeVisible();
@@ -64,8 +64,8 @@ test("Catálogo muestra un botón de papelera que conserva la confirmación", as
 test("Tamaño en Catálogo usa la misma clase que Logística y se puede filtrar", async ({ page }) => {
   const largeCode = String(Date.now());
   const smallCode = String(Date.now() + 1);
-  const largeResponse = await page.request.post("/api/products", { data: { kind: "Pallet", measure: "100 x 100", zetaCode: largeCode, attributes: { modelo: `Prueba ${largeCode}`, taco: "5 tacos", refuerzo: "Liviano", identificacion: "Punto Rojo", "corte-esquina": "Con corte", terminacion: "Rústico", tratamiento: "Con HT", "logo-propio": "A" } } });
-  const smallResponse = await page.request.post("/api/products", { data: { kind: "Pallet", measure: "100 x 100", zetaCode: smallCode, attributes: { modelo: `Prueba ${smallCode}` } } });
+  const largeResponse = await page.request.post("/api/products", { data: { kind: "Pallet", measure: "100 x 100", code: largeCode, attributes: { modelo: `Prueba ${largeCode}`, taco: "5 tacos", refuerzo: "Liviano", identificacion: "Punto Rojo", "corte-esquina": "Con corte", terminacion: "Rústico", tratamiento: "Con HT", "logo-propio": "A" } } });
+  const smallResponse = await page.request.post("/api/products", { data: { kind: "Pallet", measure: "100 x 100", code: smallCode, attributes: { modelo: `Prueba ${smallCode}` } } });
   expect(largeResponse.ok()).toBeTruthy();
   expect(smallResponse.ok()).toBeTruthy();
   const { product: largeProduct } = await largeResponse.json();

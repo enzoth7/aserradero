@@ -6,7 +6,7 @@ import { generateRoutes } from "./server/generate-routes.mjs";
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), {
-    name: "ecoase-api",
+    name: "api",
     configureServer(server) {
       const apiDirectory = resolve(server.config.root, "app/api") + sep;
       const refreshRoutes = (path: string) => {

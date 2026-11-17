@@ -33,7 +33,6 @@ async function payloadOf<T>(response: Response) {
 
 function ProductCard({ item, onChanged }: { item: ClientProduct; onChanged: (next: ClientProduct) => void }) {
   const [editing, setEditing] = useState(false);
-  const [controls, setControls] = useState(item.controls.map((control) => ({ title: control.title, detail: control.detail ?? "", active: control.active })));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const primaryAsset = item.assets.find((asset) => asset.active && asset.isPrimary);
@@ -58,15 +57,11 @@ function ProductCard({ item, onChanged }: { item: ClientProduct; onChanged: (nex
   const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setSaving(true); setError("");
     const form = new FormData(event.currentTarget);
-    const controlsToSave = controls.map((control, index) => ({ ...control, title: String(form.get(`control-${index}`) ?? "").trim() })).filter((control) => control.title);
     const response = await fetch(`/api/client-products/${item.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ operationalName: form.get("operationalName"), displayOrder: item.displayOrder, active: item.active }) });
     const payload = await payloadOf<{ product?: ClientProduct }>(response);
     if (!response.ok || !payload.product) { setSaving(false); return setError(payload.error ?? "No se pudo guardar."); }
-    const controlsResponse = await fetch(`/api/client-products/${item.id}/controls`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ controls: controlsToSave }) });
-    const controlsPayload = await payloadOf<{ product?: ClientProduct }>(controlsResponse); setSaving(false);
-    if (!controlsResponse.ok || !controlsPayload.product) return setError(controlsPayload.error ?? "No se pudieron guardar los puntos de control.");
-    setControls(controlsPayload.product.controls.map((control) => ({ title: control.title, detail: control.detail ?? "", active: control.active })));
-    onChanged(controlsPayload.product); setEditing(false);
+    setSaving(false);
+    onChanged(payload.product); setEditing(false);
   };
 
   const upload = async (event: FormEvent<HTMLFormElement>) => {
@@ -97,20 +92,19 @@ function ProductCard({ item, onChanged }: { item: ClientProduct; onChanged: (nex
     onChanged({ ...item, assets: item.assets.filter((asset) => String(asset.id) !== String(assetId)) });
   };
 
-  const zetaCode = item.product.zetaCode ?? item.zetaCode;
+  const code = item.product.code ?? item.code;
   return <details className="client-product-card">
-    <summary><span><ChevronDown size={17} aria-hidden="true" /><strong>{productLabel(item.product, item.operationalName)}</strong>{zetaCode && <small>Código {zetaCode}</small>}</span></summary>
+    <summary><span><ChevronDown size={17} aria-hidden="true" /><strong>{productLabel(item.product, item.operationalName)}</strong>{code && <small>Código {code}</small>}</span></summary>
     <div className="client-product-body">
       <div className="client-product-details">
         <section className="client-product-section">
-        <div className="client-product-section-heading"><h4>Información del producto</h4>{editing ? <AsyncButton type="submit" form={productFormId} className="product-save-button" loading={saving} loadingLabel="Guardando…"><Save size={16} />Guardar</AsyncButton> : <button type="button" className="text-button" onClick={() => { if (!controls.length) setControls([{ title: "", detail: "", active: true }]); setEditing(true); }}>Editar</button>}</div>
+        <div className="client-product-section-heading"><h4>Información del producto</h4>{editing ? <AsyncButton type="submit" form={productFormId} className="product-save-button" loading={saving} loadingLabel="Guardando…"><Save size={16} />Guardar</AsyncButton> : <button type="button" className="text-button" onClick={() => setEditing(true)}>Editar</button>}</div>
         {editing ? <form id={productFormId} className="client-product-settings" onSubmit={saveProduct}>
           <label>Nombre operativo<input name="operationalName" defaultValue={item.operationalName} /></label>
           <div className="readonly-product-field"><span>Tipo</span><strong>{item.product.kind}</strong></div>
           <div className="readonly-product-field"><span>Medidas</span><strong>{item.product.measure ?? "Sin medida"}</strong></div>
-          <div className="readonly-product-field"><span>Código</span><strong>{zetaCode || "—"}</strong></div>
-          <fieldset className="control-editor"><legend>Puntos de control</legend>{controls.map((control, index) => <input key={index} name={`control-${index}`} defaultValue={control.title} aria-label={`Punto de control ${index + 1}`} />)}<button type="button" className="add-control-button" aria-label="Agregar punto de control" onClick={() => setControls((current) => [...current, { title: "", detail: "", active: true }])}><Plus size={18} aria-hidden="true" /></button></fieldset>
-        </form> : <dl className="client-product-facts"><div><dt>Nombre operativo</dt><dd>{item.operationalName?.trim() || item.product.stockName || "—"}</dd></div><div><dt>Tipo</dt><dd>{item.product.kind}</dd></div><div><dt>Medidas</dt><dd>{item.product.measure ?? "Sin medida"}</dd></div><div><dt>Código</dt><dd>{zetaCode || "—"}</dd></div><div><dt>Puntos de control</dt><dd>{controls.length ? <ul>{controls.map((control, index) => <li key={index}>{control.title}</li>)}</ul> : "—"}</dd></div></dl>}
+          <div className="readonly-product-field"><span>Código</span><strong>{code || "—"}</strong></div>
+        </form> : <dl className="client-product-facts"><div><dt>Nombre operativo</dt><dd>{item.operationalName?.trim() || item.product.stockName || "—"}</dd></div><div><dt>Tipo</dt><dd>{item.product.kind}</dd></div><div><dt>Medidas</dt><dd>{item.product.measure ?? "Sin medida"}</dd></div><div><dt>Código</dt><dd>{code || "—"}</dd></div></dl>}
         </section>
       </div>
 
@@ -136,7 +130,7 @@ function AddClientProductDialog({ products, levels, assignedProductIds, clientId
   const [draft, setDraftState] = useState(() => draftFromProduct(undefined, products, levels));
   const setDraft: Dispatch<SetStateAction<ProductDraft>> = (value) => { setDirty(true); setError(""); setDraftState(value); };
   const normalized = query.trim().toLocaleLowerCase("es");
-  const available = products.filter((product) => product.stockActive !== false && !assignedProductIds.has(product.id)).filter((product) => !normalized || [product.zetaCode, product.stockName, product.kind, product.measure].some((value) => value?.toLocaleLowerCase("es").includes(normalized)));
+  const available = products.filter((product) => product.stockActive !== false && !assignedProductIds.has(product.id)).filter((product) => !normalized || [product.code, product.stockName, product.kind, product.measure].some((value) => value?.toLocaleLowerCase("es").includes(normalized)));
 
   const reloadLinks = async () => {
     const response = await fetch(`/api/clients/${clientId}`);
@@ -175,7 +169,7 @@ function AddClientProductDialog({ products, levels, assignedProductIds, clientId
     <div className="segmented full" role="tablist" aria-label="Origen del producto"><button type="button" role="tab" aria-selected={mode === "existing"} className={mode === "existing" ? "active" : ""} onClick={() => setMode("existing")}>Del catálogo</button><button type="button" role="tab" aria-selected={mode === "new"} className={mode === "new" ? "active" : ""} onClick={() => setMode("new")}>Producto nuevo</button></div>
     {mode === "existing" ? <div className="sheet-form">
       <label className="search-field compact"><Search size={15} aria-hidden="true" /><input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por código, nombre o medida" aria-label="Buscar producto" /></label>
-      <div className="client-picker-options tall" role="group" aria-label="Productos del catálogo">{available.map((product) => { const checked = selected.includes(product.id); return <label key={product.id} className={checked ? "checked" : ""}><input type="checkbox" checked={checked} onChange={() => { setDirty(true); setSelected((current) => checked ? current.filter((item) => item !== product.id) : [...current, product.id]); }} /><span><strong>{product.zetaCode ?? "—"}</strong> · {productLabel(product)}</span></label>; })}{!available.length && <small>No hay más productos para asociar. Creá uno nuevo.</small>}</div>
+      <div className="client-picker-options tall" role="group" aria-label="Productos del catálogo">{available.map((product) => { const checked = selected.includes(product.id); return <label key={product.id} className={checked ? "checked" : ""}><input type="checkbox" checked={checked} onChange={() => { setDirty(true); setSelected((current) => checked ? current.filter((item) => item !== product.id) : [...current, product.id]); }} /><span><strong>{product.code ?? "—"}</strong> · {productLabel(product)}</span></label>; })}{!available.length && <small>No hay más productos para asociar. Creá uno nuevo.</small>}</div>
       <FieldError id="add-client-product-error">{error}</FieldError>
       <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><AsyncButton type="button" className="primary-button" loading={saving} loadingLabel="Agregando…" disabled={!selected.length} onClick={() => void addExisting()}><Plus size={16} />{selected.length > 1 ? `Agregar ${selected.length} productos` : "Agregar producto"}</AsyncButton></div>
     </div> : <form className="sheet-form" onSubmit={createNew}>

@@ -260,19 +260,18 @@ export function registerAdminTools(server: McpServer, context: ToolContext) {
   apiTool(server, context, {
     name: "habilitar_producto_cliente",
     title: "Habilitar un producto para un cliente",
-    description: "Asocia un producto del catálogo a un cliente para poder hacerle pedidos. Requiere un primer punto de control.",
+    description: "Asocia un producto del catálogo a un cliente para poder hacerle pedidos.",
     access: "write",
     input: {
       clienteId: identificador("ID del cliente."),
       productoId: z.string().min(1).describe("ID del producto del catálogo."),
       nombreOperativo: z.string().optional().describe("Cómo lo llama el cliente."),
-      controlInicial: z.string().min(1).describe("Primer punto de control del producto para este cliente."),
       orden: z.number().int().optional(),
     },
     request: (args) => ({
       method: "POST",
       path: `/api/clients/${enc(args.clienteId)}/products`,
-      body: clean({ productId: args.productoId, operationalName: args.nombreOperativo, initialControl: args.controlInicial, displayOrder: args.orden }),
+      body: clean({ productId: args.productoId, operationalName: args.nombreOperativo, displayOrder: args.orden }),
     }),
     summary: "Producto habilitado para el cliente.",
   });
@@ -294,24 +293,6 @@ export function registerAdminTools(server: McpServer, context: ToolContext) {
   });
 
   apiTool(server, context, {
-    name: "guardar_controles_producto_cliente",
-    title: "Definir los puntos de control de un producto de cliente",
-    description: "Reemplaza la lista de puntos de control (los que se revisan al registrar HT) de un producto de un cliente. Incluí todos los que deben quedar.",
-    access: "write",
-    idempotent: true,
-    input: {
-      clienteProductoId: identificador("ID de la relación cliente-producto."),
-      controles: z.array(z.object({ titulo: z.string().min(1), detalle: z.string().optional(), activo: z.boolean().optional() })),
-    },
-    request: ({ clienteProductoId, controles }) => ({
-      method: "PUT",
-      path: `/api/client-products/${enc(clienteProductoId)}/controls`,
-      body: { controls: controles.map((control) => clean({ title: control.titulo, detail: control.detalle, active: control.activo })) },
-    }),
-    summary: "Controles guardados.",
-  });
-
-  apiTool(server, context, {
     name: "eliminar_archivo_producto_cliente",
     title: "Quitar un plano o foto",
     description: "Quita un plano o foto de un producto de cliente (queda fuera de uso). Pedí confirmación.",
@@ -329,7 +310,7 @@ export function registerAdminTools(server: McpServer, context: ToolContext) {
     atributos: z.record(z.string(), z.string()).optional().describe("Valor por nivel de clasificación (ver niveles_producto): clave = id del nivel."),
     alturaCm: z.number().positive().nullable().optional().describe("Altura en cm (máx. dos decimales); null para quitarla."),
     requiereHT: z.boolean().optional(),
-    codigoZeta: z.string().optional().describe("Código numérico Zeta. Obligatorio al crear."),
+    codigo: z.string().optional().describe("Código numérico del producto. Obligatorio al crear."),
     nombreStock: z.string().optional(),
     clienteIds: z.array(z.string()).optional().describe("Clientes asociados."),
   };
@@ -340,10 +321,10 @@ export function registerAdminTools(server: McpServer, context: ToolContext) {
     access: "write",
     input: { productoId: z.string().optional().describe("ID del producto a editar. Si se omite, se crea uno nuevo."), ...productoCampos },
     run: async (args) => {
-      if (args.productoId === undefined && (!args.tipo || !args.codigoZeta)) return fail("Para crear un producto indicá tipo y código Zeta.");
+      if (args.productoId === undefined && (!args.tipo || !args.codigo)) return fail("Para crear un producto indicá tipo y código.");
       const body = clean({
         kind: args.tipo, measure: args.medida, attributes: args.atributos, heightCm: args.alturaCm, requiresTreatment: args.requiereHT,
-        zetaCode: args.codigoZeta, stockName: args.nombreStock, clientIds: args.clienteIds,
+        code: args.codigo, stockName: args.nombreStock, clientIds: args.clienteIds,
       });
       if (args.productoId !== undefined && !args.tipo) {
         const current = await callApi({ method: "GET", path: "/api/products" });

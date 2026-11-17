@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-const port = Number(process.env.ECOASE_E2E_PORT || 3477);
+const port = Number(process.env.E2E_PORT || 3477);
 
 export default defineConfig({
   testDir: "./tests/browser",
@@ -8,7 +8,7 @@ export default defineConfig({
   webServer: {
     command: "node --import tsx server/node.ts --serve-dist",
     url: `http://127.0.0.1:${port}/api/orders`,
-    env: { ECOASE_DATA_BACKEND: "memory", PORT: String(port) },
+    env: { DATA_BACKEND: "memory", PORT: String(port) },
     reuseExistingServer: false,
     timeout: 30_000,
   },

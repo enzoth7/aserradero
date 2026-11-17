@@ -1,4 +1,4 @@
-name: Deploy - Vercel (ecoase)
+name: Deploy - Vercel
 
 on:
   push:

@@ -8,7 +8,7 @@ export const shiftDryingDay = (date: string, days: number) =>
   new Date(parseDryingDay(date).valueOf() + days * dryingDayMs).toISOString().slice(0, 10);
 
 export function lineNeedsDrying(line: OrderLine, productsRequiringTreatment: Set<string>) {
-  return Boolean(line.treatment || (line.productId && productsRequiringTreatment.has(line.productId)));
+  return Boolean(line.requiresTreatment || (line.productId && productsRequiringTreatment.has(line.productId)));
 }
 
 export function dryingOrderLines(order: OperationOrder, products: Product[], productsRequiringTreatment: Set<string>) {

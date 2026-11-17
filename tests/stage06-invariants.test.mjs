@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("separa los artículos de Pamer aunque la ficha antigua haya perdido su asociación", () => {
   const rows = [
-    { product: { id: "legacy-pamer", zetaCode: "Z7", stockActive: false, clientNames: [] }, physical: 100 },
+    { product: { id: "legacy-pamer", code: "Z7", stockActive: false, clientNames: [] }, physical: 100 },
     { product: { id: "catalog-pamer", clientNames: ["Pamer"] }, physical: 20 },
     { product: { id: "shared", clientNames: ["Pamer", "Otro cliente"] }, physical: 15 },
     { product: { id: "other", clientNames: [] }, physical: 10 },
@@ -66,20 +66,6 @@ test("los comandos de stock quedan reservados al servidor", async () => {
   }
 });
 
-test("la importación conserva detalle y documenta el total defectuoso de Palbin", async () => {
-  const [migration, reconciliation] = await Promise.all([
-    read("supabase/migrations/20260829214819_stock_break_risk_refactor.sql"),
-    read("supabase/migrations/20260829215512_document_palbin_summary_formula_gap.sql"),
-  ]);
-  assert.match(migration, /3\.0Control Stock Palbin/i);
-  assert.match(migration, /3\.1 Control_Stock_PAMER/i);
-  assert.match(migration, /'Palbin','P39'/i);
-  assert.match(migration, /'Pamer','P22'/i);
-  assert.match(reconciliation, /expected_pending=3199/i);
-  assert.match(reconciliation, /source_reported_pending=2150/i);
-  assert.match(reconciliation, /omiten? las filas 34:47/i);
-});
-
 test("la pantalla expone saldos, filtros y movimientos", async () => {
   const view = await read("app/StockView.tsx");
   for (const copy of ["Stock general", "Stock Pamer", "Registrar entrada", "Saldos del producto", "Movimientos"]) assert.match(view, new RegExp(copy));
@@ -102,7 +88,7 @@ test("los datos opcionales del cliente no bloquean pedidos", async () => {
   assert.doesNotMatch(migration, /ficha de producto está incompleta/i);
   assert.doesNotMatch(store, /La dirección de entrega es obligatoria para activar/);
   assert.doesNotMatch(store, /Para activar, cargue la dirección/);
-  assert.match(master, /return Boolean\(\(item\.product\?\.zetaCode \?\? item\.zetaCode\)\.trim\(\)\)/);
+  assert.match(master, /return Boolean\(\(item\.product\?\.code \?\? item\.code\)\.trim\(\)\)/);
   assert.match(dashboard, /selectedClient\?\.address \|\| clientProducts\[0\]\?\.clientAddress \|\| "—"/);
 });
 

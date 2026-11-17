@@ -17,7 +17,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ cli
     const product = await createClientProduct(clientId, {
       productId: typeof body.productId === "string" ? body.productId : "",
       operationalName: typeof body.operationalName === "string" ? body.operationalName : undefined,
-      initialControl: typeof body.initialControl === "string" ? body.initialControl : "",
       displayOrder: typeof body.displayOrder === "number" ? body.displayOrder : undefined,
     });
     return Response.json({ product }, { status: 201 });

@@ -11,7 +11,7 @@ import {
   kindOptions,
   productKey,
   requiresHeatTreatment,
-  suggestNextZetaCode,
+  suggestNextCode,
   treatmentOf,
   type ProductAttributes,
   type ProductLevel,
@@ -28,14 +28,14 @@ export type ProductDraft = {
   widthCm: string;
   heightCm: string;
   attributes: ProductAttributes;
-  zetaCode: string;
+  code: string;
   stockName: string;
   nameTouched: boolean;
 };
 
 export function draftFromProduct(product: Product | undefined, products: Product[], levels: ProductLevel[]): ProductDraft {
   if (!product) {
-    return { kind: "Pallet", measure: "", lengthCm: "", widthCm: "", heightCm: "10", attributes: {}, zetaCode: suggestNextZetaCode(products), stockName: "", nameTouched: false };
+    return { kind: "Pallet", measure: "", lengthCm: "", widthCm: "", heightCm: "10", attributes: {}, code: suggestNextCode(products), stockName: "", nameTouched: false };
   }
   const dimensions = palletDimensionsCm(product.measure);
   const draft: ProductDraft = {
@@ -45,7 +45,7 @@ export function draftFromProduct(product: Product | undefined, products: Product
     widthCm: dimensions ? String(dimensions.widthCm).replace(".", ",") : "",
     heightCm: String(product.heightCm ?? 10).replace(".", ","),
     attributes: { ...cleanAttributes(product.attributes), [TREATMENT_LEVEL]: treatmentOf(product) },
-    zetaCode: product.zetaCode ?? "",
+    code: product.code ?? "",
     stockName: product.stockName ?? "",
     nameTouched: false,
   };
@@ -70,20 +70,20 @@ export function draftName(draft: ProductDraft, levels: ProductLevel[]) {
 /** Lo que viaja a la API: medida, un valor por nivel y el nombre final. */
 export function draftPayload(draft: ProductDraft, levels: ProductLevel[], clientIds?: string[]) {
   const shape = toProductShape(draft);
-  return { kind: shape.kind, measure: shape.measure, heightCm: draft.kind === "Pallet" && draft.heightCm.trim() ? Number(draft.heightCm.trim().replace(",", ".")) : null, attributes: shape.attributes, zetaCode: draft.zetaCode.trim(), stockName: draftName(draft, levels).trim(), ...(clientIds ? { clientIds } : {}) };
+  return { kind: shape.kind, measure: shape.measure, heightCm: draft.kind === "Pallet" && draft.heightCm.trim() ? Number(draft.heightCm.trim().replace(",", ".")) : null, attributes: shape.attributes, code: draft.code.trim(), stockName: draftName(draft, levels).trim(), ...(clientIds ? { clientIds } : {}) };
 }
 
 export function validateDraft(draft: ProductDraft, products: Product[], editingId?: string) {
   if (draft.kind === "Pallet" && (!positiveCentimeters(draft.lengthCm) || !positiveCentimeters(draft.widthCm))) return "Indicá largo y ancho mayores que cero en centímetros.";
   if (draft.kind === "Pallet" && !positiveCentimeters(draft.heightCm)) return "Indicá una altura válida mayor que cero en centímetros.";
   if (!draft.measure.trim()) return "Elegí la medida.";
-  if (!/^[1-9]\d*$/.test(draft.zetaCode.trim())) return "Indicá un código numérico.";
+  if (!/^[1-9]\d*$/.test(draft.code.trim())) return "Indicá un código numérico.";
   const shape = toProductShape(draft);
   const key = productKey(shape);
   const twin = products.find((product) => product.id !== editingId && productKey(product) === key);
-  if (twin) return `Ya existe un producto con esa clasificación (código ${twin.zetaCode ?? twin.id}). Si cambia algo para distinguirlo, completá ese nivel.`;
-  const code = draft.zetaCode.trim().toLocaleUpperCase("es");
-  const sameCode = products.find((product) => product.id !== editingId && product.zetaCode?.toLocaleUpperCase("es") === code);
+  if (twin) return `Ya existe un producto con esa clasificación (código ${twin.code ?? twin.id}). Si cambia algo para distinguirlo, completá ese nivel.`;
+  const code = draft.code.trim().toLocaleUpperCase("es");
+  const sameCode = products.find((product) => product.id !== editingId && product.code?.toLocaleUpperCase("es") === code);
   if (sameCode) return `El código ${code} ya lo usa otro producto.`;
   return "";
 }
@@ -159,7 +159,7 @@ export function ProductDraftFields({ draft, setDraft, levels }: { draft: Product
       </fieldset>
       <fieldset className="sheet-group"><legend>Identificación</legend>
         <label className="option-field"><span>Código <em aria-hidden="true">*</em></span>
-          <input value={draft.zetaCode} onChange={(event) => setDraft((current) => ({ ...current, zetaCode: event.target.value }))} required inputMode="numeric" pattern="[1-9][0-9]*" autoComplete="off" />
+          <input value={draft.code} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} required inputMode="numeric" pattern="[1-9][0-9]*" autoComplete="off" />
         </label>
         <label className="option-field"><span>Nombre</span>
           <input value={draftName(draft, levels)} onChange={(event) => setDraft((current) => ({ ...current, stockName: event.target.value, nameTouched: true }))} placeholder="Se arma con la clasificación" />

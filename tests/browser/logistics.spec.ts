@@ -10,7 +10,7 @@ async function makeReadyOrder(request: APIRequestContext, quantity: number, read
   const clientResponse = await request.post("/api/clients", { data: { name: clientName } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json();
-  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p04" } });
+  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-04" } });
   expect(relationResponse.ok()).toBeTruthy();
   const { product } = await relationResponse.json();
   const orderResponse = await request.post("/api/orders", { data: { lines: [{ clientProductId: product.id, quantity }], orderDate: date, plannedDate: date, transportSource: "internal" } });
@@ -129,7 +129,7 @@ test("configura capacidades de transporte y parámetros por cliente", async ({ p
   await page.getByLabel(`${clientName}, horas de ida`).fill("1.85");
   await clientRow.getByRole("button", { name: `Guardar distancia de ${clientName}` }).click();
   const { orderId } = await makeReadyOrder(request, 100, 90);
-  const classification = await request.put("/api/logistics/config", { data: { kind: "class", productId: "palbin-p04", palletClass: "small" } });
+  const classification = await request.put("/api/logistics/config", { data: { kind: "class", productId: "producto-04", palletClass: "small" } });
   expect(classification.ok()).toBeTruthy();
   await page.goto(`/viajes?pedido=${orderId}`);
   const dialog = page.getByRole("dialog", { name: "Asignar transporte" });
@@ -248,7 +248,7 @@ test("solo planifica palets listos y confirma el transporte después", async ({ 
 
 test("la capacidad de flota propia acompaña la selección de carga", async ({ page, request }) => {
   const { orderId } = await makeReadyOrder(request, 10, 6);
-  const classification = await request.put("/api/logistics/config", { data: { kind: "class", productId: "palbin-p04", palletClass: "small" } });
+  const classification = await request.put("/api/logistics/config", { data: { kind: "class", productId: "producto-04", palletClass: "small" } });
   expect(classification.ok()).toBeTruthy();
   const snapshot = await (await request.get("/api/logistics/snapshot")).json();
   const vehicle = snapshot.vehicles.find((item: { active: boolean; smallCapacity?: number }) => item.active && item.smallCapacity && item.smallCapacity >= 6);
@@ -278,11 +278,11 @@ test("una carga mixta usa el volumen como guía y se puede guardar sin capacidad
   const clientResponse = await request.post("/api/clients", { data: { name: `Mezcla ${code}` } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json();
-  const largeResponse = await request.post("/api/products", { data: { kind: "Pallet", measure: "160 x 110", zetaCode: code, attributes: { modelo: `Mezcla ${code}`, tratamiento: "Sin HT" } } });
+  const largeResponse = await request.post("/api/products", { data: { kind: "Pallet", measure: "160 x 110", code: code, attributes: { modelo: `Mezcla ${code}`, tratamiento: "Sin HT" } } });
   expect(largeResponse.ok()).toBeTruthy();
   const { product: largeProduct } = await largeResponse.json();
   const relations = [];
-  for (const productId of ["palbin-p04", largeProduct.id]) {
+  for (const productId of ["producto-04", largeProduct.id]) {
     const response = await request.post(`/api/clients/${client.id}/products`, { data: { productId } });
     expect(response.ok()).toBeTruthy();
     relations.push((await response.json()).product.id);

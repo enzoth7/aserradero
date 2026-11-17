@@ -13,7 +13,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       heightCm: parseHeightCm(body),
       requiresTreatment: parseRequiresTreatment(body),
       stockName: typeof body.stockName === "string" ? body.stockName : undefined,
-      zetaCode: typeof body.zetaCode === "string" ? body.zetaCode : undefined,
+      code: typeof body.code === "string" ? body.code : undefined,
       clientId: typeof body.clientId === "string" && body.clientId ? body.clientId : undefined,
       clientIds: parseClientIds(body.clientIds),
     });

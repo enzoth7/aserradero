@@ -1,4 +1,4 @@
-# Plan de Logística · Ecoase
+# Plan de Logística
 
 **Fecha:** 10 de noviembre de 2026  
 **Alcance:** pantallas, reglas, cálculos y datos de Logística. Las otras áreas siguen registrando producción, HT y stock; Logística lee esos datos para decidir qué se puede cargar.
@@ -58,7 +58,7 @@ Una tarjeta de viaje muestra **previsto / cargable ahora / faltante**, desglosad
 
 En “Planificar carga”, seleccionar un **producto de relleno** y pulsar “Completar espacio”. La sugerencia es el mínimo entre espacio restante del camión, saldo del pedido aún no asignado a viajes y stock listo libre de ese producto. Se muestra la cuenta antes de guardar. La persona puede ajustar la cifra y confirma la carga efectiva. Si el producto requiere HT pendiente, no se ofrece como físicamente cargable. La sugerencia no crea un pedido ni mueve stock por sí sola.
 
-Para carga homogénea: `libres = límite del vehículo/clase − unidades ya planificadas de esa clase`. Para carga mixta, usar la regla operativa acordada con Ecoase; no aplicar una conversión aproximada sin validarla.
+Para carga homogénea: `libres = límite del vehículo/clase − unidades ya planificadas de esa clase`. Para carga mixta, usar la regla operativa acordada con el aserradero; no aplicar una conversión aproximada sin validarla.
 
 ## 6. Mapa y factibilidad de viajes
 

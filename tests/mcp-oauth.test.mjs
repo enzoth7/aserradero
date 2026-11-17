@@ -2,21 +2,21 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import test from "node:test";
 
-process.env.ECOASE_DATA_BACKEND = "memory";
-for (const name of ["ECOASE_MCP_TOKEN", "ECOASE_MCP_READ_TOKEN", "ECOASE_MCP_PASSWORD", "ECOASE_PUBLIC_URL"]) delete process.env[name];
+process.env.DATA_BACKEND = "memory";
+for (const name of ["MCP_TOKEN", "MCP_READ_TOKEN", "MCP_PASSWORD", "PUBLIC_URL"]) delete process.env[name];
 
 const { dispatch } = await import("../server/router.ts");
-const ORIGIN = "https://ecoase.example";
+const ORIGIN = "https://dashboard.example";
 const REDIRECT = "https://claude.ai/api/mcp/auth_callback";
-const send = (path, init = {}) => dispatch(new Request(`${ORIGIN}${path}`, { ...init, headers: { host: "ecoase.example", ...(init.headers ?? {}) } }));
+const send = (path, init = {}) => dispatch(new Request(`${ORIGIN}${path}`, { ...init, headers: { host: "dashboard.example", ...(init.headers ?? {}) } }));
 const form = (data) => ({ method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(data).toString() });
 
 function configure() {
-  process.env.ECOASE_MCP_TOKEN = "token-fijo-de-prueba";
-  process.env.ECOASE_MCP_PASSWORD = "clave-corta-1234";
-  process.env.ECOASE_MCP_READ_TOKEN = "token-lectura-de-prueba";
+  process.env.MCP_TOKEN = "token-fijo-de-prueba";
+  process.env.MCP_PASSWORD = "clave-corta-1234";
+  process.env.MCP_READ_TOKEN = "token-lectura-de-prueba";
 }
-function reset() { for (const name of ["ECOASE_MCP_TOKEN", "ECOASE_MCP_READ_TOKEN", "ECOASE_MCP_PASSWORD"]) delete process.env[name]; }
+function reset() { for (const name of ["MCP_TOKEN", "MCP_READ_TOKEN", "MCP_PASSWORD"]) delete process.env[name]; }
 
 async function register(uris = [REDIRECT]) {
   const response = await send("/oauth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ redirect_uris: uris, client_name: "Claude" }) });
@@ -66,7 +66,7 @@ test("publica los datos que Claude necesita para descubrir el acceso", async () 
     }
     const denied = await tools();
     assert.equal(denied.response.status, 401);
-    assert.match(denied.response.headers.get("www-authenticate"), /resource_metadata="https:\/\/ecoase\.example\/\.well-known\/oauth-protected-resource"/);
+    assert.match(denied.response.headers.get("www-authenticate"), /resource_metadata="https:\/\/dashboard.example\/\.well-known\/oauth-protected-resource"/);
   } finally { reset(); }
 });
 
@@ -143,7 +143,7 @@ test("el token de solo lectura inicia una sesión sin herramientas de escritura"
 test("rechaza direcciones de retorno no registradas, inseguras o sin PKCE", async () => {
   configure();
   try {
-    assert.equal((await register(["http://ecoase.example/cb"])).response.status, 400);
+    assert.equal((await register(["http://dashboard.example/cb"])).response.status, 400);
     assert.equal((await register(["http://localhost:6274/oauth/callback"])).response.status, 201);
     const { body } = await register();
     const { challenge } = pkce();
@@ -164,7 +164,7 @@ test("rotar el token cierra las sesiones abiertas", async () => {
     const { verifier, challenge } = pkce();
     const tokens = await exchange(body.client_id, challenge, verifier, "clave-corta-1234");
     assert.equal((await tools(tokens.access_token)).response.status, 200);
-    process.env.ECOASE_MCP_TOKEN = "token-rotado";
+    process.env.MCP_TOKEN = "token-rotado";
     assert.equal((await tools(tokens.access_token)).response.status, 401);
   } finally { reset(); }
 });

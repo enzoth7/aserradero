@@ -1,15 +1,6 @@
 import { buildProductName, canonicalProductName, hasClassification, productHeatTreatmentLabel, treatmentOf } from "./classification";
 import type { Client, Product } from "./data";
 
-export type ClientProductControl = {
-  id: number | string;
-  clientProductId: number | string;
-  title: string;
-  detail?: string;
-  displayOrder: number;
-  active: boolean;
-};
-
 export type ClientProductAsset = {
   id: number | string;
   clientProductId: number | string;
@@ -28,14 +19,13 @@ export type ClientProduct = {
   id: number | string;
   clientId: string;
   productId: string;
-  zetaCode: string;
+  code: string;
   operationalName?: string;
   active: boolean;
   displayOrder: number;
   createdAt: string;
   updatedAt: string;
   product: Product;
-  controls: ClientProductControl[];
   assets: ClientProductAsset[];
 };
 
@@ -54,17 +44,16 @@ export type ClientProductOption = {
   productId: string;
   kind?: Product["kind"];
   label: string;
-  zetaCode: string;
+  code: string;
   clientAddress?: string;
   treatmentRequired: boolean;
-  controlsReady: boolean;
 };
 
 export const allowedAssetTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"] as const;
 export const maximumAssetBytes = 6 * 1024 * 1024;
 
-export function clientProductReady(item: Pick<ClientProduct, "zetaCode" | "controls" | "assets"> & { product?: Pick<Product, "zetaCode"> }) {
-  return Boolean((item.product?.zetaCode ?? item.zetaCode).trim());
+export function clientProductReady(item: Pick<ClientProduct, "code" | "assets"> & { product?: Pick<Product, "code"> }) {
+  return Boolean((item.product?.code ?? item.code).trim());
 }
 
 export function productLabel(product: Product, operationalName?: string) {

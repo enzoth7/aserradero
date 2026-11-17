@@ -79,7 +79,7 @@ export function buildOperationalAlerts(orders: OperationOrder[], today: string):
 
     for (const line of order.lines) {
       const treatmentPending = line.treatmentPendingQuantity;
-      if (line.treatment && typeof treatmentPending === "number" && treatmentPending > 0 && daysUntilDelivery <= 3) {
+      if (line.requiresTreatment && typeof treatmentPending === "number" && treatmentPending > 0 && daysUntilDelivery <= 3) {
         alerts.push({
           ...base,
           id: `treatment:${order.id}:${line.id}`,
@@ -147,7 +147,7 @@ export function summarizeOrder(order: OperationOrder) {
       id: line.id,
       product: line.product,
       quantity: line.quantity,
-      treatment: line.treatment,
+      requiresTreatment: line.requiresTreatment,
       treatedQuantity: line.treatedQuantity,
       treatmentPendingQuantity: line.treatmentPendingQuantity,
       production: (line.productionAllocations ?? []).map((allocation) => ({

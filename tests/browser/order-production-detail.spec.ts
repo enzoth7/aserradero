@@ -6,7 +6,7 @@ test("el detalle separa producción real, saldo por producir y fechas", async ({
   const clientResponse = await request.post("/api/clients", { data: { name: clientName } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json() as { client: { id: string } };
-  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p04" } });
+  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-04" } });
   expect(relationResponse.ok()).toBeTruthy();
   const { product } = await relationResponse.json() as { product: { id: number | string } };
   const orderResponse = await request.post("/api/orders", { data: { lines: [{ clientProductId: product.id, quantity: 10 }], orderDate: date, plannedDate: date } });
@@ -48,7 +48,7 @@ test("un producto que requiere HT no figura listo antes del tratamiento", async 
   const clientResponse = await request.post("/api/clients", { data: { name: clientName } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json() as { client: { id: string } };
-  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "pamer-p01" } });
+  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-40" } });
   expect(relationResponse.ok()).toBeTruthy();
   const { product } = await relationResponse.json() as { product: { id: number | string } };
   const orderResponse = await request.post("/api/orders", { data: { lines: [{ clientProductId: product.id, quantity: 10 }], orderDate: date, plannedDate: date } });
@@ -75,7 +75,7 @@ test("los viajes muestran encabezados redondeados y columnas sin superposición"
   const clientResponse = await request.post("/api/clients", { data: { name: clientName } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json() as { client: { id: string } };
-  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p04" } });
+  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-04" } });
   expect(relationResponse.ok()).toBeTruthy();
   const { product } = await relationResponse.json() as { product: { id: number | string } };
   const orderResponse = await request.post("/api/orders", { data: { lines: [{ clientProductId: product.id, quantity: 10 }], orderDate: date, plannedDate: date } });

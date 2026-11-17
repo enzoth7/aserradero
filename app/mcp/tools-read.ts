@@ -6,7 +6,8 @@ import { callApi, apiErrorMessage } from "./bridge";
 import { summarizeOrder } from "./operational";
 import { apiTool, count, done, fail, fecha, identificador, normalize, pickKeys, todayKey, tool, type ToolContext } from "./kit";
 
-export const guideText = `GUÍA OPERATIVA DE ECOASE
+
+export const guideText = `GUÍA OPERATIVA
 
 Flujo normal de un pedido
 1. Pedido: crear_pedido (cliente y productos salen de ver_cliente; usá clienteProductoId).
@@ -26,7 +27,7 @@ Reglas que conviene respetar
 export function registerReadTools(server: McpServer, context: ToolContext) {
   tool(server, context, {
     name: "guia_operativa",
-    title: "Guía operativa de Ecoase",
+    title: "Guía operativa",
     description: "Explica el flujo de trabajo del dashboard, las reglas y qué herramienta usar en cada paso. Leela al empezar si no conocés la operación.",
     access: "read",
     input: {},
@@ -154,7 +155,7 @@ export function registerReadTools(server: McpServer, context: ToolContext) {
   tool(server, context, {
     name: "listar_productos",
     title: "Catálogo de productos",
-    description: "Productos del catálogo con tipo (Pallet, Piso, Bin), medida, clasificación por niveles, código Zeta, si requiere HT y clientes asociados.",
+    description: "Productos del catálogo con tipo (Pallet, Piso, Bin), medida, clasificación por niveles, código, si requiere HT y clientes asociados.",
     access: "read",
     input: {
       consulta: z.string().optional().describe("Texto a buscar en nombre, medida o código."),
@@ -165,7 +166,8 @@ export function registerReadTools(server: McpServer, context: ToolContext) {
       const response = await callApi({ method: "GET", path: "/api/products" });
       if (!response.ok) return fail(apiErrorMessage(response));
       const needle = normalize(consulta ?? "");
-      const all = ((response.data as { products?: Array<Record<string, unknown>> }).products ?? []);
+      // El catálogo del dashboard no muestra los productos dados de baja (stockActive = false).
+      const all = ((response.data as { products?: Array<Record<string, unknown>> }).products ?? []).filter((product) => product.stockActive !== false);
       const found = all.filter((product) => (!tipo || product.kind === tipo) && (!needle || normalize(JSON.stringify(product)).includes(needle)));
       return done(`Hay ${found.length} producto(s)${found.length > limite ? `; muestro ${limite}` : ""}.`, { total: found.length, productos: found.slice(0, limite) });
     },
@@ -198,7 +200,7 @@ export function registerReadTools(server: McpServer, context: ToolContext) {
   tool(server, context, {
     name: "ver_cliente",
     title: "Ver un cliente con sus productos",
-    description: "Datos de un cliente y los productos que tiene habilitados, con el clienteProductoId que hace falta para crear pedidos y los puntos de control de cada producto.",
+    description: "Datos de un cliente y los productos que tiene habilitados, con el clienteProductoId que hace falta para crear pedidos.",
     access: "read",
     input: { clienteId: identificador("ID del cliente (lo da listar_clientes o clientes_con_actividad).") },
     run: async ({ clienteId }) => {
@@ -208,7 +210,10 @@ export function registerReadTools(server: McpServer, context: ToolContext) {
         callApi({ method: "GET", path: `/api/clients/${id}/products`, query: { active: true } }),
       ]);
       if (!detail.ok) return fail(apiErrorMessage(detail));
-      return done("Cliente y productos habilitados para pedidos.", { cliente: detail.data, productosParaPedido: (options.data as { products?: unknown })?.products ?? [] });
+      const visible = (detail.data as { client?: unknown; products?: Array<{ active?: boolean; product?: { stockActive?: boolean } }> });
+      // Igual que la ficha del cliente: solo productos activos y no dados de baja en el catálogo.
+      const cliente = { ...visible, products: (visible.products ?? []).filter((item) => item.active && item.product?.stockActive !== false) };
+      return done("Cliente y productos habilitados para pedidos.", { cliente, productosParaPedido: (options.data as { products?: unknown })?.products ?? [] });
     },
   });
 
@@ -245,7 +250,7 @@ export function registerReadTools(server: McpServer, context: ToolContext) {
   apiTool(server, context, {
     name: "opciones_ht",
     title: "Qué se puede registrar en HT",
-    description: "Productos con HT y su stock pendiente, con los clientes, líneas de pedido y puntos de control disponibles para registrar un lote.",
+    description: "Productos con HT y su stock pendiente, con los clientes y líneas de pedido disponibles para registrar un lote.",
     access: "read",
     input: {},
     request: () => ({ method: "GET", path: "/api/treatment/options" }),
@@ -255,7 +260,7 @@ export function registerReadTools(server: McpServer, context: ToolContext) {
   apiTool(server, context, {
     name: "ver_lote_ht",
     title: "Ver un lote de HT",
-    description: "Detalle de un lote de HT: cantidades, controles, responsable y movimientos de stock.",
+    description: "Detalle de un lote de HT: cantidades, responsable y movimientos de stock.",
     access: "read",
     input: { loteId: identificador("ID del lote.") },
     request: ({ loteId }) => ({ method: "GET", path: `/api/treatment/batches/${encodeURIComponent(String(loteId))}` }),

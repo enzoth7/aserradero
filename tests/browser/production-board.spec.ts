@@ -5,7 +5,7 @@ test("el asistente de planificación es amplio sin ocupar toda la ventana", asyn
   const clientResponse = await request.post("/api/clients", { data: { name: clientName } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json() as { client: { id: string } };
-  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p02" } });
+  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-02" } });
   expect(relationResponse.ok()).toBeTruthy();
   const { product } = await relationResponse.json() as { product: { id: number | string } };
   const orderResponse = await request.post("/api/orders", { data: { lines: [{ clientProductId: product.id, quantity: 10 }], orderDate: "2026-11-05", plannedDate: "2026-11-12" } });
@@ -72,10 +72,10 @@ test("John y Esteban aparece solo al distribuir bins en un pedido mixto", async 
   const clientResponse = await request.post("/api/clients", { data: { name: clientName } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json() as { client: { id: string } };
-  const binResponse = await request.post("/api/products", { data: { kind: "Bin", measure: `${suffix % 100000} x 99`, zetaCode: String(700000000 + suffix % 100000000) } });
+  const binResponse = await request.post("/api/products", { data: { kind: "Bin", measure: `${suffix % 100000} x 99`, code: String(700000000 + suffix % 100000000) } });
   expect(binResponse.ok()).toBeTruthy();
   const { product: bin } = await binResponse.json() as { product: { id: string } };
-  const palletLink = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p02" } });
+  const palletLink = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-02" } });
   const binLink = await request.post(`/api/clients/${client.id}/products`, { data: { productId: bin.id } });
   expect(palletLink.ok()).toBeTruthy();
   expect(binLink.ok()).toBeTruthy();
@@ -108,7 +108,7 @@ test("la ficha de reglas reconoce un pallet aunque la API no envíe el tipo", as
   const clientResponse = await request.post("/api/clients", { data: { name: `Reglas sin tipo ${Date.now()}` } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json() as { client: { id: string } };
-  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p02" } });
+  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-02" } });
   expect(relationResponse.ok()).toBeTruthy();
   const { product } = await relationResponse.json() as { product: { id: number | string } };
   await page.route(`**/api/clients/${client.id}/products`, async (route) => {
@@ -145,7 +145,7 @@ test("muestra la ocupación normal por productor y el resumen diario", async ({ 
   const clientResponse = await request.post("/api/clients", { data: { name: `Ocupación diaria ${Date.now()}` } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json() as { client: { id: string } };
-  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p02" } });
+  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-02" } });
   expect(relationResponse.ok()).toBeTruthy();
   const { product } = await relationResponse.json() as { product: { id: number | string } };
   const beforeResponse = await request.get(`/api/capacity?from=${monday}&to=${tuesday}`);
@@ -207,7 +207,7 @@ test("abre el detalle del producto y mueve una asignación entre días", async (
   const clientResponse = await request.post("/api/clients", { data: { name: clientName } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json() as { client: { id: string } };
-  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p02", operationalName: "Alias corto" } });
+  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-02", operationalName: "Alias corto" } });
   expect(relationResponse.ok()).toBeTruthy();
   const { product } = await relationResponse.json() as { product: { id: number | string } };
   const productName = "Palets Citrus / Con HT";
@@ -285,7 +285,7 @@ test("registra desde la producción planificada y muestra el destino real", asyn
   const clientResponse = await request.post("/api/clients", { data: { name: clientName } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json() as { client: { id: string } };
-  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p02" } });
+  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-02" } });
   expect(relationResponse.ok()).toBeTruthy();
   const { product } = await relationResponse.json() as { product: { id: string | number } };
   const orderResponse = await request.post("/api/orders", { data: { lines: [{ clientProductId: product.id, quantity: 10 }], orderDate: date, plannedDate: date } });
@@ -358,7 +358,7 @@ test("suma lo producido en la fecha real y muestra lo pendiente del pedido", asy
   const clientResponse = await request.post("/api/clients", { data: { name: clientName } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json() as { client: { id: string } };
-  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p02" } });
+  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-02" } });
   expect(relationResponse.ok()).toBeTruthy();
   const { product } = await relationResponse.json() as { product: { id: string | number } };
   const orderResponse = await request.post("/api/orders", { data: { lines: [{ clientProductId: product.id, quantity: 10 }], orderDate: plannedDate, plannedDate: actualDate } });
@@ -406,7 +406,7 @@ test("colorea el resultado de cada tarjeta y oculta el porcentaje al cerrar el d
   const clientResponse = await request.post("/api/clients", { data: { name: `Resultado visual ${Date.now()}` } });
   expect(clientResponse.ok()).toBeTruthy();
   const { client } = await clientResponse.json() as { client: { id: string } };
-  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "palbin-p02" } });
+  const relationResponse = await request.post(`/api/clients/${client.id}/products`, { data: { productId: "producto-02" } });
   expect(relationResponse.ok()).toBeTruthy();
   const { product } = await relationResponse.json() as { product: { id: number | string } };
   const resourceName = `Cuadrilla resultado ${Date.now()}`;

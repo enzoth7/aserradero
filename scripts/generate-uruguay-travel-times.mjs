@@ -5,7 +5,7 @@ const citiesUrl = "https://sit.mvot.gub.uy/arcgis/rest/services/06_PROY/Sistema_
 const output = new URL("../app/uruguay-travel-times.json", import.meta.url);
 
 async function json(url) {
-  const response = await fetch(url, { headers: { "User-Agent": "EcoaseOperations/1.0 (local map data preparation)" }, signal: AbortSignal.timeout(90000) });
+  const response = await fetch(url, { headers: { "User-Agent": "Operaciones/1.0 (local map data preparation)" }, signal: AbortSignal.timeout(90000) });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
   return response.json();
 }

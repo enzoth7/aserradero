@@ -2,7 +2,7 @@ import { calculateLineAvailability, classifyPallet, loadWarnings, tripWarnings, 
 import { getClients, getLogisticsTreatmentProgress, getOrders, getProducts, getProviders, getStockMovements, getStockSummary } from "./store";
 import { supabaseServerRequest } from "../lib/supabase";
 
-const memory = process.env.ECOASE_DATA_BACKEND === "memory";
+const memory = process.env.DATA_BACKEND === "memory";
 const defaultDrivers: LogisticsDriver[] = [{ id: "susalla", name: "Susalla", active: true }, { id: "giossa", name: "Giossa", active: true }];
 const defaultVehicles: LogisticsVehicle[] = [
   { id: "howo", name: "HOWO grande", smallCapacity: 638, largeCapacity: 273, active: true },

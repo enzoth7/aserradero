@@ -1,6 +1,6 @@
 # Control Operativo: sistema visual
 
-Identidad de la aplicación operativa de Ecoase. `AGENTS.md` conserva las reglas funcionales y de accesibilidad obligatorias.
+Identidad de la aplicación operativa. `AGENTS.md` conserva las reglas funcionales y de accesibilidad obligatorias.
 
 ## Carácter
 

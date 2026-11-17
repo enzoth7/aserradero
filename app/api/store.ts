@@ -1,5 +1,5 @@
 import {
-  compareProductsByInternalCode,
+  compareProductsByCode,
   formatPlannedDate,
   getOrderPlannedDate,
   getOrderStage,
@@ -42,7 +42,7 @@ import type {
   ProductionResource,
   ProductionResourceType,
 } from "../production-capacity";
-import { MEASURE_LEVEL, TREATMENT_LEVEL, applyLevelRules, attributesFromLegacy, buildProductName, canonicalProductName, cleanAttributes, cleanOptions, defaultProductLevels, levelSlug, levelValue, productHeatTreatmentLabel, productKey, requiresHeatTreatment, type ProductAttributes, type ProductLevel } from "../classification";
+import { MEASURE_LEVEL, TREATMENT_LEVEL, applyLevelRules, buildProductName, canonicalProductName, cleanAttributes, cleanOptions, defaultProductLevels, levelSlug, levelValue, productHeatTreatmentLabel, productKey, requiresHeatTreatment, type ProductAttributes, type ProductLevel } from "../classification";
 import { createPrivateAssetUrl, deletePrivateAsset, supabaseRequest, supabaseServerRequest, uploadPrivateAsset } from "../lib/supabase";
 import {
   allowedAssetTypes,
@@ -63,7 +63,6 @@ import {
   type StockMovement,
   type TreatmentBatch,
   type TreatmentBatchStatus,
-  type TreatmentControlCheck,
   type TreatmentDashboard,
   type TreatmentDestination,
   type TreatmentNotPerformed,
@@ -113,7 +112,7 @@ export type UpdateProductInput = {
   /** Sólo para clientes viejos de la API que no mandan el nivel Tratamiento. */
   requiresTreatment?: boolean;
   stockName?: string;
-  zetaCode?: string;
+  code?: string;
   clientId?: string;
   clientIds?: string[];
 };
@@ -133,7 +132,6 @@ type DbOrder = {
   stage: OperationStage;
   order_date: string | null;
   requested_delivery_date: string | null;
-  zeta_code: string | null;
   planned_date: string;
   original_planned_date: string | null;
   transport: string;
@@ -173,7 +171,7 @@ type DbChange = {
   order_change_items: Array<{ field: string; from_value: string; to_value: string; position: number }>;
 };
 
-const useMemoryStore = process.env.ECOASE_DATA_BACKEND === "memory";
+const useMemoryStore = process.env.DATA_BACKEND === "memory";
 const memoryOrders: OperationOrder[] = structuredClone(seededOrders);
 const memoryHistory = new Map<string, OrderChange[]>();
 const memoryProducts: Product[] = structuredClone(seededProducts);
@@ -235,9 +233,8 @@ function canonicalOperations(operations: CapacityOperation[] | null | undefined)
   return [...new Set((operations ?? ["assembly"]).map((operation) => operation === "marking" || operation === "ht" ? "treatment" : operation))];
 }
 
-function treatmentFromLabel(label: string) {
-  if (productHeatTreatmentLabel(label) === "Con HT") return "Marcado" as const;
-  return undefined;
+function requiresTreatmentFromLabel(label: string) {
+  return productHeatTreatmentLabel(label) === "Con HT";
 }
 
 for (const order of memoryOrders) {
@@ -245,7 +242,7 @@ for (const order of memoryOrders) {
   order.requiredOperations = canonicalOperations(order.requiredOperations);
   order.product = canonicalProductName(order.product);
   for (const line of order.lines) {
-    line.treatment = treatmentFromLabel(line.product);
+    line.requiresTreatment = requiresTreatmentFromLabel(line.product);
     line.product = canonicalProductName(line.product);
     const resourceId = order.producerProviderId ?? (order.productionSource === "internal" ? "internal" : undefined);
     line.productionAllocations = [{ id: `pa-${line.id}`, orderLineId: line.id, resourceId, productionResourceId: resourceId, plannedDate: order.productionDate ?? order.importArrivalDate ?? getOrderPlannedDate(order), plannedQuantity: line.quantity, status: "draft", note: "Planificación histórica", createdAt, updatedAt: createdAt }];
@@ -260,7 +257,7 @@ for (const order of memoryOrders) {
     dispatchedAt: ["dispatched", "delivered"].includes(shipmentStatus) ? order.dispatchedAt ?? createdAt : undefined,
     deliveredAt: shipmentStatus === "delivered" ? order.deliveredAt ?? createdAt : undefined,
     createdAt, updatedAt: createdAt,
-    lines: order.lines.map((line, index) => ({ id: `sl-${line.id}`, shipmentId: `shipment-${order.id}`, orderLineId: line.id, product: line.product, treatment: line.treatment, plannedQuantity: line.quantity, deliveredQuantity: Math.min(line.quantity, Math.max(order.delivered - order.lines.slice(0, index).reduce((sum, item) => sum + item.quantity, 0), 0)) })),
+    lines: order.lines.map((line, index) => ({ id: `sl-${line.id}`, shipmentId: `shipment-${order.id}`, orderLineId: line.id, product: line.product, plannedQuantity: line.quantity, deliveredQuantity: Math.min(line.quantity, Math.max(order.delivered - order.lines.slice(0, index).reduce((sum, item) => sum + item.quantity, 0), 0)) })),
     events: [{ id: `se-${order.id}`, shipmentId: `shipment-${order.id}`, eventType: "created", nextStatus: shipmentStatus, nextDate: getOrderPlannedDate(order), responsible: "Migración", createdAt }],
   }];
 }
@@ -284,7 +281,6 @@ function mapOrder(row: DbOrder): OperationOrder {
     stage: row.stage,
     orderDate: row.order_date ?? undefined,
     requestedDeliveryDate: row.requested_delivery_date ?? undefined,
-    zetaCode: row.zeta_code ?? undefined,
     plannedDate: row.planned_date,
     originalPlannedDate: row.original_planned_date ?? undefined,
     dateLabel: formatPlannedDate(row.planned_date),
@@ -317,7 +313,7 @@ function mapOrder(row: DbOrder): OperationOrder {
     dryingNote: row.drying_note ?? undefined,
     lines: [...(row.order_lines ?? [])]
       .sort((a, b) => a.position - b.position)
-      .map((line) => ({ id: line.id, product: canonicalProductName(line.product), productId: line.product_id ?? undefined, clientProductId: line.client_product_id ?? undefined, quantity: line.requested_quantity ?? line.quantity, preparation: line.preparation ?? undefined, treatment: treatmentFromLabel(line.product) })),
+      .map((line) => ({ id: line.id, product: canonicalProductName(line.product), productId: line.product_id ?? undefined, clientProductId: line.client_product_id ?? undefined, quantity: line.requested_quantity ?? line.quantity, preparation: line.preparation ?? undefined, requiresTreatment: requiresTreatmentFromLabel(line.product) })),
   };
 }
 
@@ -351,7 +347,7 @@ async function attachDatabaseOperations(orders: OperationOrder[]) {
       transportProviderId: item.transport_provider_id ?? undefined, transportLabel: item.transport_source === "internal" ? providerNames.get(item.transport_provider_id ?? "") ?? "Transporte interno" : providerNames.get(item.transport_provider_id ?? "") ?? "Transportista",
       remittance: item.remittance ?? undefined, sharedRemittanceReason: item.shared_remittance_reason ?? undefined, deliveryAddressSnapshot: item.delivery_address_snapshot ?? undefined,
       loadedAt: item.loaded_at ?? undefined, dispatchedAt: item.dispatched_at ?? undefined, deliveredAt: item.delivered_at ?? undefined, createdAt: item.created_at, updatedAt: item.updated_at,
-      lines: item.shipment_lines.map((line) => ({ id: line.id, shipmentId: line.shipment_id, orderLineId: line.order_line_id, product: lineMap.get(line.order_line_id)?.product ?? "Producto", treatment: lineMap.get(line.order_line_id)?.treatment, plannedQuantity: line.planned_quantity, loadedQuantity: line.loaded_quantity ?? undefined, deliveredQuantity: line.delivered_quantity })),
+      lines: item.shipment_lines.map((line) => ({ id: line.id, shipmentId: line.shipment_id, orderLineId: line.order_line_id, product: lineMap.get(line.order_line_id)?.product ?? "Producto", plannedQuantity: line.planned_quantity, loadedQuantity: line.loaded_quantity ?? undefined, deliveredQuantity: line.delivered_quantity })),
       events: [...item.shipment_events].sort((a, b) => a.created_at.localeCompare(b.created_at)).map((event) => ({ id: event.id, shipmentId: event.shipment_id, eventType: event.event_type, previousStatus: event.previous_status ?? undefined, nextStatus: event.next_status ?? undefined, previousDate: event.previous_date ?? undefined, nextDate: event.next_date ?? undefined, reason: event.reason ?? undefined, note: event.note ?? undefined, previousRemittance: event.previous_remittance ?? undefined, nextRemittance: event.next_remittance ?? undefined, responsible: event.responsible, createdAt: event.created_at })),
     }));
   }
@@ -587,7 +583,7 @@ export async function getProducts() {
       ...product,
       heightCm: product.kind === "Pallet" ? product.heightCm ?? 10 : product.heightCm,
       clientNames: [...new Set(memoryClientProducts.filter((item) => item.productId === product.id && item.active).map((item) => clientNameById.get(item.clientId)).filter((name): name is string => Boolean(name)))].sort((a, b) => a.localeCompare(b, "es")),
-    })).sort(compareProductsByInternalCode);
+    })).sort(compareProductsByCode);
   }
   const query = new URLSearchParams({
     select: "*",
@@ -607,7 +603,7 @@ export async function getProducts() {
     names.add(name);
     namesByProduct.set(assignment.product_id, names);
   }
-  return rows.map((row) => ({ ...mapProduct(row), clientNames: [...(namesByProduct.get(row.id) ?? [])].sort((a, b) => a.localeCompare(b, "es")) })).sort(compareProductsByInternalCode);
+  return rows.map((row) => ({ ...mapProduct(row), clientNames: [...(namesByProduct.get(row.id) ?? [])].sort((a, b) => a.localeCompare(b, "es")) })).sort(compareProductsByCode);
 }
 
 export async function getClients() {
@@ -698,10 +694,6 @@ export async function deleteClient(id: string): Promise<{ ok: boolean }> {
         `/rest/v1/client_product_assets?client_product_id=eq.${cp.id}`,
         { method: "DELETE" }
       ).catch(() => undefined);
-      await supabaseServerRequest<unknown>(
-        `/rest/v1/client_product_controls?client_product_id=eq.${cp.id}`,
-        { method: "DELETE" }
-      ).catch(() => undefined);
     }
 
 
@@ -725,27 +717,22 @@ export async function deleteClient(id: string): Promise<{ ok: boolean }> {
   return { ok: true };
 }
 
-type DbProductRow = { id: string; kind: ProductKind; measure: string | null; height_cm?: number | null; treatment: Product["treatment"] | null; requires_treatment: boolean; stock_name?: string | null; source_catalog?: Product["sourceCatalog"] | null; source_code?: string | null; zeta_code?: string | null; stock_active?: boolean; attributes?: Record<string, string> | null; model?: string | null; reinforcement?: string | null; board_count?: number | null; quality?: string | null; finish?: string | null; heat_treatment?: string | null };
+type DbProductRow = { id: string; kind: ProductKind; measure: string | null; height_cm?: number | null; requires_treatment: boolean; stock_name?: string | null; code?: string | null; stock_active?: boolean; attributes?: Record<string, string> | null };
 function mapProduct(row: DbProductRow): Product {
-  // Antes de aplicar la migración de niveles los valores viven en las columnas viejas: se pasan a niveles al leer.
-  const stored = cleanAttributes(row.attributes);
-  const hasLegacy = Boolean(row.model || row.reinforcement || row.board_count || row.quality || row.finish || row.heat_treatment);
-  const attributes = row.attributes != null ? stored : hasLegacy ? attributesFromLegacy(row) : undefined;
-  return { id: row.id, kind: row.kind, measure: row.measure ?? undefined, heightCm: row.kind === "Pallet" ? row.height_cm ?? 10 : row.height_cm ?? undefined, treatment: row.treatment ?? undefined, requiresTreatment: row.requires_treatment, stockName: row.stock_name ?? undefined, sourceCatalog: row.source_catalog ?? undefined, sourceCode: row.source_code ?? undefined, zetaCode: row.zeta_code ?? undefined, stockActive: row.stock_active ?? true, ...(attributes !== undefined ? { attributes } : {}) };
+  const attributes = row.attributes != null ? cleanAttributes(row.attributes) : undefined;
+  return { id: row.id, kind: row.kind, measure: row.measure ?? undefined, heightCm: row.kind === "Pallet" ? row.height_cm ?? 10 : row.height_cm ?? undefined, requiresTreatment: row.requires_treatment, stockName: row.stock_name ?? undefined, code: row.code ?? undefined, stockActive: row.stock_active ?? true, ...(attributes !== undefined ? { attributes } : {}) };
 }
 
 type DbClientProductRow = {
   id: number;
   client_id: string;
   product_id: string;
-  zeta_code: string | null;
   operational_name: string | null;
   active: boolean;
   display_order: number;
   created_at: string;
   updated_at: string;
   products: DbProductRow | DbProductRow[];
-  client_product_controls: Array<{ id: number; client_product_id: number; title: string; detail: string | null; display_order: number; active: boolean }>;
   client_product_assets: Array<{ id: number; client_product_id: number; storage_path: string; file_name: string; asset_type: "photo" | "plan"; mime_type: ClientProductAsset["mimeType"]; size_bytes: number; alt_text: string; is_primary: boolean; active: boolean; created_at: string }>;
 };
 
@@ -755,23 +742,20 @@ function mapClientProduct(row: DbClientProductRow): ClientProduct {
     id: row.id,
     clientId: row.client_id,
     productId: row.product_id,
-    zetaCode: product.zetaCode ?? row.zeta_code ?? "",
+    code: product.code ?? "",
     operationalName: row.operational_name ?? undefined,
     active: row.active,
     displayOrder: row.display_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     product,
-    controls: [...(row.client_product_controls ?? [])].sort((a, b) => a.display_order - b.display_order).map((control) => ({
-      id: control.id, clientProductId: control.client_product_id, title: control.title, detail: control.detail ?? undefined, displayOrder: control.display_order, active: control.active,
-    })),
     assets: [...(row.client_product_assets ?? [])].filter((asset) => asset.active).map((asset) => ({
       id: asset.id, clientProductId: asset.client_product_id, storagePath: asset.storage_path, fileName: asset.file_name, assetType: asset.asset_type, mimeType: asset.mime_type, sizeBytes: asset.size_bytes, altText: asset.alt_text, isPrimary: asset.is_primary, active: asset.active, createdAt: asset.created_at,
     })),
   };
 }
 
-const masterSelect = "id,client_id,product_id,zeta_code,operational_name,active,display_order,created_at,updated_at,products(*),client_product_controls(id,client_product_id,title,detail,display_order,active),client_product_assets(id,client_product_id,storage_path,file_name,asset_type,mime_type,size_bytes,alt_text,is_primary,active,created_at)";
+const masterSelect = "id,client_id,product_id,operational_name,active,display_order,created_at,updated_at,products(*),client_product_assets(id,client_product_id,storage_path,file_name,asset_type,mime_type,size_bytes,alt_text,is_primary,active,created_at)";
 
 async function getClientProduct(id: number | string) {
   if (useMemoryStore) return memoryClientProducts.find((item) => String(item.id) === String(id)) ?? null;
@@ -797,31 +781,29 @@ export async function getClientProductOptions(clientId: string, activeOnly = tru
     productId: item.productId,
     kind: item.product.kind,
     label: productLabel(item.product, item.operationalName),
-    zetaCode: item.product.zetaCode ?? item.zetaCode,
+    code: item.product.code ?? item.code,
     clientAddress: detail.client.address,
     treatmentRequired: item.product.requiresTreatment,
-    controlsReady: item.controls.some((control) => control.active),
   }));
 }
 
-export type CreateClientProductInput = { productId: string; operationalName?: string; initialControl?: string; displayOrder?: number };
+export type CreateClientProductInput = { productId: string; operationalName?: string; displayOrder?: number };
 export async function createClientProduct(clientId: string, input: CreateClientProductInput) {
-  const initialControl = input.initialControl?.trim() ?? "";
   if (!input.productId) throw new Error("Seleccione un producto.");
   if (useMemoryStore) {
     const client = memoryClients.find((item) => item.id === clientId);
     const product = memoryProducts.find((item) => item.id === input.productId);
     if (!client || !product) throw new Error("Cliente o producto no encontrado.");
     if (memoryClientProducts.some((item) => item.clientId === clientId && item.productId === input.productId)) throw Object.assign(new Error("Ese producto ya está habilitado para el cliente."), { status: 409 });
-    const zetaCode = product.zetaCode ?? "";
+    const code = product.code ?? "";
     const id = memoryMasterId++;
     const now = new Date().toISOString();
-    const item: ClientProduct = { id, clientId, productId: product.id, zetaCode, operationalName: input.operationalName?.trim() || undefined, active: true, displayOrder: input.displayOrder ?? memoryClientProducts.filter((entry) => entry.clientId === clientId).length, createdAt: now, updatedAt: now, product, controls: initialControl ? [{ id: memoryMasterId++, clientProductId: id, title: initialControl, displayOrder: 0, active: true }] : [], assets: [] };
+    const item: ClientProduct = { id, clientId, productId: product.id, code, operationalName: input.operationalName?.trim() || undefined, active: true, displayOrder: input.displayOrder ?? memoryClientProducts.filter((entry) => entry.clientId === clientId).length, createdAt: now, updatedAt: now, product, assets: [] };
     memoryClientProducts.push(item);
     seedMemoryPalletProductionRules(item);
     return item;
   }
-  const id = await supabaseServerRequest<number>("/rest/v1/rpc/create_client_product_master_v2", { method: "POST", body: JSON.stringify({ p_client_id: clientId, p_product_id: input.productId, p_operational_name: input.operationalName?.trim() || null, p_control_title: initialControl, p_control_detail: null }) });
+  const id = await supabaseServerRequest<number>("/rest/v1/rpc/create_client_product_master_v3", { method: "POST", body: JSON.stringify({ p_client_id: clientId, p_product_id: input.productId, p_operational_name: input.operationalName?.trim() || null }) });
   const item = await getClientProduct(id);
   if (!item) throw new Error("La relación se creó pero no pudo recuperarse.");
   return item;
@@ -831,28 +813,15 @@ export type UpdateClientProductInput = { operationalName?: string; active?: bool
 export async function updateClientProduct(id: number | string, input: UpdateClientProductInput) {
   const current = await getClientProduct(id);
   if (!current) return null;
-  const zetaCode = current.product.zetaCode ?? current.zetaCode;
-  const next = { ...current, zetaCode, operationalName: input.operationalName === undefined ? current.operationalName : input.operationalName.trim() || undefined, active: input.active ?? current.active, displayOrder: input.displayOrder ?? current.displayOrder };
-  if (!next.zetaCode) throw new Error("El código es obligatorio.");
+  const code = current.product.code ?? current.code;
+  const next = { ...current, code, operationalName: input.operationalName === undefined ? current.operationalName : input.operationalName.trim() || undefined, active: input.active ?? current.active, displayOrder: input.displayOrder ?? current.displayOrder };
+  if (!next.code) throw new Error("El código es obligatorio.");
   if (useMemoryStore) {
     Object.assign(current, next, { updatedAt: new Date().toISOString() });
     if (next.active) seedMemoryPalletProductionRules(current);
     return current;
   }
   await supabaseServerRequest<unknown>("/rest/v1/rpc/update_client_product_master_v2", { method: "POST", body: JSON.stringify({ p_id: Number(id), p_operational_name: next.operationalName ?? null, p_active: next.active, p_display_order: next.displayOrder }) });
-  return getClientProduct(id);
-}
-
-export async function replaceClientProductControls(id: number | string, controls: Array<{ title: string; detail?: string; active?: boolean }>) {
-  const normalized = controls.map((control) => ({ title: control.title.trim(), detail: control.detail?.trim() || undefined, active: control.active !== false })).filter((control) => control.title);
-  const current = await getClientProduct(id);
-  if (!current) return null;
-  if (useMemoryStore) {
-    current.controls = normalized.map((control, index) => ({ id: memoryMasterId++, clientProductId: current.id, title: control.title, detail: control.detail, active: control.active, displayOrder: index }));
-    current.updatedAt = new Date().toISOString();
-    return current;
-  }
-  await supabaseServerRequest<unknown>("/rest/v1/rpc/replace_client_product_controls", { method: "POST", body: JSON.stringify({ p_client_product_id: Number(id), p_controls: normalized }) });
   return getClientProduct(id);
 }
 
@@ -1023,8 +992,8 @@ export async function createProduct(input: CreateProductInput) {
   validateProductHeight(input.heightCm);
   const heightCm = input.kind === "Pallet" ? input.heightCm ?? 10 : input.heightCm ?? null;
   const levels = await getProductLevels();
-  const zetaCode = input.zetaCode?.trim().toLocaleUpperCase("es");
-  if (!zetaCode || !/^[1-9]\d*$/.test(zetaCode)) throw new Error("Indique un código numérico.");
+  const code = input.code?.trim().toLocaleUpperCase("es");
+  if (!code || !/^[1-9]\d*$/.test(code)) throw new Error("Indique un código numérico.");
   const measure = input.measure?.trim();
   if (!measure) throw new Error("Indique la medida.");
   const attributes = resolveAttributes(input, levels);
@@ -1032,19 +1001,19 @@ export async function createProduct(input: CreateProductInput) {
   const stockName = input.stockName?.trim() || buildProductName({ kind: input.kind, measure, attributes, requiresTreatment }, levels);
   const clientIds = [...new Set(input.clientIds ?? [])].filter(Boolean);
   if (!useMemoryStore) {
-    const id = await supabaseServerRequest<string>("/rest/v1/rpc/create_catalog_product_v7", {
+    const id = await supabaseServerRequest<string>("/rest/v1/rpc/create_catalog_product_v8", {
       method: "POST",
-      body: JSON.stringify({ p_kind: input.kind, p_measure: measure, p_height_cm: heightCm, p_attributes: attributes, p_zeta_code: zetaCode, p_stock_name: stockName, p_client_ids: clientIds }),
+      body: JSON.stringify({ p_kind: input.kind, p_measure: measure, p_height_cm: heightCm, p_attributes: attributes, p_code: code, p_stock_name: stockName, p_client_ids: clientIds }),
     }).catch(levelsMigrationError);
     await rememberLevelOptions(measure, attributes);
     const product = (await getProducts()).find((item) => item.id === id);
     if (!product) throw new Error("El producto se creó pero no pudo recuperarse.");
     return product;
   }
-  if (memoryProducts.some((product) => product.zetaCode?.toLocaleUpperCase("es") === zetaCode)) throw new Error(`Ya existe un producto con el código ${zetaCode}.`);
-  const draft = { id: `producto-${crypto.randomUUID()}`, kind: input.kind, measure, heightCm: heightCm ?? undefined, attributes, requiresTreatment, zetaCode, stockName } satisfies Product;
+  if (memoryProducts.some((product) => product.code?.toLocaleUpperCase("es") === code)) throw new Error(`Ya existe un producto con el código ${code}.`);
+  const draft = { id: `producto-${crypto.randomUUID()}`, kind: input.kind, measure, heightCm: heightCm ?? undefined, attributes, requiresTreatment, code, stockName } satisfies Product;
   const twin = memoryProducts.find((product) => productKey(product) === productKey(draft));
-  if (twin) throw new Error(`Ya existe un producto con esa clasificación (código ${twin.zetaCode ?? twin.id}).`);
+  if (twin) throw new Error(`Ya existe un producto con esa clasificación (código ${twin.code ?? twin.id}).`);
   memoryProducts.push(draft);
   await rememberLevelOptions(measure, attributes);
   for (const clientId of clientIds) await assignClientToProduct(draft.id, clientId);
@@ -1065,13 +1034,12 @@ async function assignClientToProduct(productId: string, clientId: string) {
       id,
       clientId,
       productId,
-      zetaCode: product.zetaCode ?? "",
+      code: product.code ?? "",
       active: true,
       displayOrder: memoryClientProducts.filter((item) => item.clientId === clientId).length,
       createdAt: now,
       updatedAt: now,
       product,
-      controls: [],
       assets: [],
     });
     seedMemoryPalletProductionRules(memoryClientProducts[memoryClientProducts.length - 1]);
@@ -1084,7 +1052,7 @@ async function assignClientToProduct(productId: string, clientId: string) {
   await supabaseServerRequest<unknown>("/rest/v1/client_products", {
     method: "POST",
     prefer: "return=minimal",
-    body: JSON.stringify({ client_id: clientId, product_id: productId, zeta_code: null, active: true }),
+    body: JSON.stringify({ client_id: clientId, product_id: productId, active: true }),
   });
 }
 
@@ -1093,18 +1061,18 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
   const heightCm = input.kind === "Pallet" && input.heightCm === null ? 10 : input.heightCm;
   const levels = await getProductLevels();
   const stockName = input.stockName?.trim();
-  const zetaCode = input.zetaCode?.trim().toLocaleUpperCase("es");
+  const code = input.code?.trim().toLocaleUpperCase("es");
   if (input.stockName !== undefined && !stockName) throw new Error("Indique el nombre del producto.");
-  if (input.zetaCode !== undefined && (!zetaCode || !/^[1-9]\d*$/.test(zetaCode))) throw new Error("Indique un código numérico.");
+  if (input.code !== undefined && (!code || !/^[1-9]\d*$/.test(code))) throw new Error("Indique un código numérico.");
   const measure = input.measure?.trim();
   if (!measure) throw new Error("Indique la medida.");
   const attributes = resolveAttributes(input, levels);
   const requiresTreatment = requiresHeatTreatment(attributes[TREATMENT_LEVEL]);
 
   if (!useMemoryStore) {
-    await supabaseServerRequest<string>("/rest/v1/rpc/update_catalog_product_v5", {
+    await supabaseServerRequest<string>("/rest/v1/rpc/update_catalog_product_v6", {
       method: "POST",
-      body: JSON.stringify({ p_id: id, p_kind: input.kind, p_measure: measure, p_height_cm: heightCm ?? null, p_height_provided: heightCm !== undefined, p_attributes: attributes, p_zeta_code: zetaCode ?? null, p_stock_name: stockName ?? null }),
+      body: JSON.stringify({ p_id: id, p_kind: input.kind, p_measure: measure, p_height_cm: heightCm ?? null, p_height_provided: heightCm !== undefined, p_attributes: attributes, p_code: code ?? null, p_stock_name: stockName ?? null }),
     }).catch(levelsMigrationError);
     await rememberLevelOptions(measure, attributes);
     if (input.clientIds) await supabaseServerRequest<boolean>("/rest/v1/rpc/set_product_clients_v1", { method: "POST", body: JSON.stringify({ p_product_id: id, p_client_ids: [...new Set(input.clientIds)] }) });
@@ -1117,13 +1085,13 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
 
   const product = memoryProducts.find((item) => item.id === id);
   if (!product) throw new Error("Producto no encontrado.");
-  if (zetaCode && memoryProducts.some((item) => item.id !== id && item.zetaCode?.toLocaleUpperCase("es") === zetaCode)) throw new Error(`Ya existe otro producto con el código ${zetaCode}.`);
+  if (code && memoryProducts.some((item) => item.id !== id && item.code?.toLocaleUpperCase("es") === code)) throw new Error(`Ya existe otro producto con el código ${code}.`);
   const candidate = { ...product, kind: input.kind, measure, attributes, requiresTreatment };
   const twin = memoryProducts.find((item) => item.id !== id && productKey(item) === productKey(candidate));
-  if (twin) throw new Error(`Ya existe un producto con esa clasificación (código ${twin.zetaCode ?? twin.id}).`);
-  Object.assign(product, { kind: input.kind, measure, attributes, requiresTreatment, ...(heightCm !== undefined ? { heightCm: heightCm ?? undefined } : {}), ...(stockName ? { stockName } : {}), ...(zetaCode ? { zetaCode } : {}) });
+  if (twin) throw new Error(`Ya existe un producto con esa clasificación (código ${twin.code ?? twin.id}).`);
+  Object.assign(product, { kind: input.kind, measure, attributes, requiresTreatment, ...(heightCm !== undefined ? { heightCm: heightCm ?? undefined } : {}), ...(stockName ? { stockName } : {}), ...(code ? { code } : {}) });
   await rememberLevelOptions(measure, attributes);
-  if (zetaCode) memoryClientProducts.filter((item) => item.productId === id).forEach((item) => { item.zetaCode = zetaCode; item.product.zetaCode = zetaCode; });
+  if (code) memoryClientProducts.filter((item) => item.productId === id).forEach((item) => { item.code = code; item.product.code = code; });
   if (input.clientIds) {
     const wanted = new Set(input.clientIds);
     for (const clientId of wanted) await assignClientToProduct(id, clientId);
@@ -1220,7 +1188,7 @@ export async function createOrder(input: CreateOrderInput) {
   const client = memoryClients.find((item) => item.id === selected[0]?.relation?.clientId);
   if (!client || !client.active || selected.some(({ relation }) => !relation || relation.clientId !== client.id || !relation.active || !clientProductReady(relation))) throw new Error("Los productos deben estar activos y pertenecer al mismo cliente.");
   const requested = input.lines.reduce((sum, line) => sum + line.quantity, 0);
-  const resolvedLines = selected.map(({ line, relation }, index) => ({ id: "", product: productLabel(relation!.product, relation!.operationalName), productId: relation!.productId, clientProductId: relation!.id, quantity: line.quantity, treatment: relation!.product.treatment, index }));
+  const resolvedLines = selected.map(({ line, relation }, index) => ({ id: "", product: productLabel(relation!.product, relation!.operationalName), productId: relation!.productId, clientProductId: relation!.id, quantity: line.quantity, requiresTreatment: relation!.product.requiresTreatment, index }));
   const resolvedProduct = resolvedLines.map((line) => line.product).join(" · ");
 
   const id = `pedido-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -1239,7 +1207,6 @@ export async function createOrder(input: CreateOrderInput) {
     orderDate: input.orderDate,
     requestedDeliveryDate: input.plannedDate,
     deliveryDateNote: input.deliveryDateNote?.trim() || undefined,
-    zetaCode: selected.map(({ relation }) => relation!.zetaCode).join(" · "),
     plannedDate: input.plannedDate,
     dateLabel: formatPlannedDate(input.plannedDate),
     transport: "Sin definir",
@@ -1258,7 +1225,7 @@ export async function createOrder(input: CreateOrderInput) {
     lines: resolvedLines.map((line) => ({ ...line, id: `${id}-${line.index + 1}`, productionAllocations: [] })),
     source: "Alta desde dashboard",
   };
-  order.shipments = [{ id: `shipment-${crypto.randomUUID()}`, orderId: id, plannedDate: input.plannedDate, status: "planned", transportSource: "internal", transportLabel: "Sin definir", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lines: order.lines.map((line) => ({ id: `sl-${crypto.randomUUID()}`, shipmentId: `shipment-${id}`, orderLineId: line.id, product: line.product, treatment: line.treatment, plannedQuantity: line.quantity, deliveredQuantity: 0 })), events: [] }];
+  order.shipments = [{ id: `shipment-${crypto.randomUUID()}`, orderId: id, plannedDate: input.plannedDate, status: "planned", transportSource: "internal", transportLabel: "Sin definir", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lines: order.lines.map((line) => ({ id: `sl-${crypto.randomUUID()}`, shipmentId: `shipment-${id}`, orderLineId: line.id, product: line.product, plannedQuantity: line.quantity, deliveredQuantity: 0 })), events: [] }];
   order.shipments[0].events.push({ id: `se-${crypto.randomUUID()}`, shipmentId: order.shipments[0].id, eventType: "created", nextStatus: "planned", nextDate: input.plannedDate, responsible: "Sistema", createdAt: new Date().toISOString() });
   memoryOrders.unshift(order);
   return order;
@@ -1413,7 +1380,7 @@ export async function createShipment(orderId: string, input: ShipmentInput) {
   if (input.transportSource === "external" && input.transportProviderId && provider?.type !== "Transporte") throw new Error("Seleccione un transportista registrado.");
   const now = new Date().toISOString();
   const id = `shipment-${crypto.randomUUID()}`;
-  const shipment: Shipment = { id, orderId, plannedDate: input.plannedDate, status: "planned", transportSource: input.transportSource, transportProviderId: input.transportProviderId, transportLabel: input.transportSource === "internal" ? "Transporte interno" : provider?.name ?? "Transportista", createdAt: now, updatedAt: now, lines: input.lines.map((item) => { const line = order.lines.find((entry) => entry.id === item.orderLineId)!; return { id: `sl-${crypto.randomUUID()}`, shipmentId: id, orderLineId: line.id, product: line.product, treatment: line.treatment, plannedQuantity: item.plannedQuantity, deliveredQuantity: 0 }; }), events: [{ id: `se-${crypto.randomUUID()}`, shipmentId: id, eventType: "created", nextStatus: "planned", nextDate: input.plannedDate, responsible: input.responsible?.trim() || "Operación", createdAt: now }] };
+  const shipment: Shipment = { id, orderId, plannedDate: input.plannedDate, status: "planned", transportSource: input.transportSource, transportProviderId: input.transportProviderId, transportLabel: input.transportSource === "internal" ? "Transporte interno" : provider?.name ?? "Transportista", createdAt: now, updatedAt: now, lines: input.lines.map((item) => { const line = order.lines.find((entry) => entry.id === item.orderLineId)!; return { id: `sl-${crypto.randomUUID()}`, shipmentId: id, orderLineId: line.id, product: line.product, plannedQuantity: item.plannedQuantity, deliveredQuantity: 0 }; }), events: [{ id: `se-${crypto.randomUUID()}`, shipmentId: id, eventType: "created", nextStatus: "planned", nextDate: input.plannedDate, responsible: input.responsible?.trim() || "Operación", createdAt: now }] };
   order.shipments ??= [];
   order.shipments.push(shipment); refreshMemoryOrder(order); return shipment;
 }
@@ -1429,7 +1396,7 @@ export async function updatePlannedShipment(shipmentId: number | string, input: 
   if (shipment.status !== "planned") throw new Error("Solo se edita un viaje planificado.");
   validateMemoryShipmentLines(order, shipmentId, input.lines);
   shipment.plannedDate = input.plannedDate; shipment.transportSource = input.transportSource; shipment.transportProviderId = input.transportProviderId; shipment.transportLabel = input.transportSource === "internal" ? "Transporte interno" : memoryProviders.find((item) => item.id === input.transportProviderId)?.name ?? "Transportista"; shipment.updatedAt = new Date().toISOString();
-  shipment.lines = input.lines.map((item) => { const line = order.lines.find((entry) => entry.id === item.orderLineId)!; return { id: `sl-${crypto.randomUUID()}`, shipmentId, orderLineId: line.id, product: line.product, treatment: line.treatment, plannedQuantity: item.plannedQuantity, deliveredQuantity: 0 }; });
+  shipment.lines = input.lines.map((item) => { const line = order.lines.find((entry) => entry.id === item.orderLineId)!; return { id: `sl-${crypto.randomUUID()}`, shipmentId, orderLineId: line.id, product: line.product, plannedQuantity: item.plannedQuantity, deliveredQuantity: 0 }; });
   refreshMemoryOrder(order); return shipment;
 }
 
@@ -2113,12 +2080,11 @@ type DbStockMovementRow = {
   order_line_id: string | null; shipment_line_id: number | null; client_id: string | null; provider_id: string | null;
   remittance: string | null; source_reference: string | null;
 };
-type DbTreatmentCheckRow = { id: number; batch_id: number; control_id: number; control_title_snapshot: string; result: TreatmentControlCheck["result"]; note: string | null };
 type DbTreatmentBatchRow = {
   id: number; product_id: string; client_product_id: number | null; order_line_id: string | null;
   quantity: number; performed_at: string; responsible: string; status: TreatmentBatchStatus;
   note: string | null; reversal_of_batch_id: number | null; created_at: string;
-  treatment_control_checks: DbTreatmentCheckRow[]; stock_movements: DbStockMovementRow[];
+  stock_movements: DbStockMovementRow[];
 };
 
 function mapStockMovement(row: DbStockMovementRow): StockMovement {
@@ -2136,7 +2102,7 @@ function mapStockMovement(row: DbStockMovementRow): StockMovement {
 
 async function loadDatabaseTreatmentBatches(filters: string) {
   const [rows, products, clients, clientProducts, lines, orders] = await Promise.all([
-    supabaseRequest<DbTreatmentBatchRow[]>(`/rest/v1/treatment_batches?select=*,treatment_control_checks(*),stock_movements(*)&${filters}&order=performed_at.desc,id.desc&treatment_control_checks.order=id.asc&stock_movements.order=id.asc`),
+    supabaseRequest<DbTreatmentBatchRow[]>(`/rest/v1/treatment_batches?select=*,stock_movements(*)&${filters}&order=performed_at.desc,id.desc&stock_movements.order=id.asc`),
     getProducts(),
     getClients(),
     supabaseRequest<Array<{ id: number; client_id: string }>>("/rest/v1/client_products?select=id,client_id"),
@@ -2169,7 +2135,6 @@ async function loadDatabaseTreatmentBatches(filters: string) {
     reversalOfBatchId: row.reversal_of_batch_id ?? undefined,
     reversedByBatchId: reversedBy.get(String(row.id)),
     createdAt: row.created_at,
-    checks: (row.treatment_control_checks ?? []).map((check) => ({ id: check.id, batchId: check.batch_id, controlId: check.control_id, title: check.control_title_snapshot, result: check.result, note: check.note ?? undefined })),
     movements: (row.stock_movements ?? []).map(mapStockMovement),
   }));
 }
@@ -2250,7 +2215,7 @@ export async function recordTreatmentNotPerformed(input: TreatmentNotPerformed) 
   if (!order?.dryingStartDate || !line || isOrderClosed(order) || input.date < order.dryingStartDate || input.date > (order.dryingEndDate ?? order.dryingStartDate)) {
     throw new Error("El lote ya no está programado para esa fecha.");
   }
-  if (!line.treatment && !(await getProducts()).some((product) => product.id === line.productId && product.requiresTreatment)) throw new Error("El producto no requiere HT.");
+  if (!line.requiresTreatment && !(await getProducts()).some((product) => product.id === line.productId && product.requiresTreatment)) throw new Error("El producto no requiere HT.");
   const existing = await getTreatmentNotPerformed(input.date, addDays(input.date, 1));
   if (existing.some((result) => result.orderLineId === input.orderLineId)) return;
   // A missed operation is an incident on the order, with no treatment batch or stock movement.
@@ -2272,7 +2237,6 @@ export async function getTreatmentOptions(): Promise<TreatmentProductOption[]> {
     const base = {
       clientProductId: relation.id,
       clientName: clientMap.get(relation.clientId) ?? relation.clientId,
-      controls: relation.controls.filter((control) => control.active).map((control) => ({ id: control.id, title: control.title, detail: control.detail })),
       primaryAsset: primary && url ? { id: primary.id, url, mimeType: primary.mimeType, altText: primary.altText } : undefined,
     };
     const destinations: TreatmentDestination[] = relation.active ? [{ key: `client:${relation.id}`, label: base.clientName, ...base }] : [];
@@ -2288,7 +2252,7 @@ export async function getTreatmentOptions(): Promise<TreatmentProductOption[]> {
       label: productTreatmentLabel(product),
       pending: balance.pending,
       ready: balance.ready,
-      destinations: [{ key: "general", label: "Stock general", controls: [] }, ...relationDestinations.filter((entry) => entry.productId === product.id).flatMap((entry) => entry.destinations)],
+      destinations: [{ key: "general", label: "Stock general" }, ...relationDestinations.filter((entry) => entry.productId === product.id).flatMap((entry) => entry.destinations)],
     };
   }).sort((a, b) => a.label.localeCompare(b.label, "es"));
 }
@@ -2305,7 +2269,7 @@ function refreshMemoryTreatmentProgress(orderLineId?: string) {
 
 export async function recordTreatmentBatch(input: CreateTreatmentBatchInput): Promise<TreatmentRecordResult> {
   if (!useMemoryStore) {
-    return supabaseServerRequest<TreatmentRecordResult>("/rest/v1/rpc/record_treatment_batch_v1", { method: "POST", body: JSON.stringify({
+    return supabaseServerRequest<TreatmentRecordResult>("/rest/v1/rpc/record_treatment_batch_v2", { method: "POST", body: JSON.stringify({
       p_product_id: input.productId,
       p_client_product_id: input.clientProductId === undefined ? null : Number(input.clientProductId),
       p_order_line_id: input.orderLineId ?? null,
@@ -2313,7 +2277,6 @@ export async function recordTreatmentBatch(input: CreateTreatmentBatchInput): Pr
       p_performed_at: input.performedAt,
       p_responsible: input.responsible.trim(),
       p_note: input.note?.trim() || null,
-      p_controls: input.controls,
     }) });
   }
   const product = memoryProducts.find((item) => item.id === input.productId);
@@ -2331,39 +2294,27 @@ export async function recordTreatmentBatch(input: CreateTreatmentBatchInput): Pr
   }
   if (relation) {
     if (relation.productId !== product.id) throw new Error("El cliente/producto no coincide con el producto.");
-    const activeControls = relation.controls.filter((control) => control.active);
-    if (input.controls.some((check) => !activeControls.some((control) => String(control.id) === String(check.controlId)))) throw new Error("Uno de los controles no pertenece a la ficha seleccionada.");
-  } else if (input.controls.length) throw new Error("Stock general no admite controles específicos de cliente.");
-  const failed = input.controls.filter((control) => control.result === "fail");
-  if (failed.some((control) => !control.note?.trim())) throw new Error("Explique cada control no conforme.");
-  if (failed.length && !input.note?.trim()) throw new Error("Explique el rechazo del lote.");
+  }
   const balances = calculateStockBalances(memoryStockMovements);
   const previous = balances.get(product.id) ?? { pending: 0, ready: 0 };
-  const status: TreatmentBatchStatus = failed.length ? "rejected" : "posted";
   const id = `batch-${memoryTreatmentId++}`;
   const transformationId = crypto.randomUUID();
-  const checks: TreatmentControlCheck[] = input.controls.map((check) => {
-    const control = relation?.controls.find((item) => String(item.id) === String(check.controlId));
-    return { id: `check-${memoryTreatmentId++}`, batchId: id, controlId: check.controlId, title: control?.title ?? "Control", result: check.result, note: check.note?.trim() || undefined };
-  });
   const batch: TreatmentBatch = {
     id, productId: product.id, productName: productTreatmentLabel(product), clientProductId: relation?.id,
     clientName: relation ? memoryClients.find((client) => client.id === relation!.clientId)?.name : undefined,
     orderLineId: input.orderLineId, orderReference: input.orderLineId ? memoryOrders.find((order) => order.lines.some((line) => line.id === input.orderLineId))?.reference : undefined,
-    quantity: input.quantity, performedAt: input.performedAt, responsible: input.responsible.trim(), status,
-    note: input.note?.trim() || undefined, createdAt: new Date().toISOString(), checks, movements: [],
+    quantity: input.quantity, performedAt: input.performedAt, responsible: input.responsible.trim(), status: "posted",
+    note: input.note?.trim() || undefined, createdAt: new Date().toISOString(), movements: [],
   };
-  if (status === "posted") {
-    const base = { productId: product.id, treatmentBatchId: id, transformationId, performedAt: input.performedAt, responsible: input.responsible.trim(), note: input.note?.trim() || undefined, createdAt: new Date().toISOString() };
-    batch.movements = [
-      { ...base, id: `movement-${memoryTreatmentId++}`, stockState: "pending_treatment", quantity: -input.quantity, movementType: "treatment_out" },
-      { ...base, id: `movement-${memoryTreatmentId++}`, stockState: "ready", quantity: input.quantity, movementType: "treatment_in" },
-    ];
-    memoryStockMovements.push(...batch.movements);
-  }
+  const base = { productId: product.id, treatmentBatchId: id, transformationId, performedAt: input.performedAt, responsible: input.responsible.trim(), note: input.note?.trim() || undefined, createdAt: new Date().toISOString() };
+  batch.movements = [
+    { ...base, id: `movement-${memoryTreatmentId++}`, stockState: "pending_treatment", quantity: -input.quantity, movementType: "treatment_out" },
+    { ...base, id: `movement-${memoryTreatmentId++}`, stockState: "ready", quantity: input.quantity, movementType: "treatment_in" },
+  ];
+  memoryStockMovements.push(...batch.movements);
   memoryTreatmentBatches.push(batch);
   refreshMemoryTreatmentProgress(input.orderLineId);
-  return { batchId: id, status, transformationId: status === "posted" ? transformationId : undefined, previousPending: previous.pending, newPending: previous.pending - (status === "posted" ? input.quantity : 0), previousReady: previous.ready, newReady: previous.ready + (status === "posted" ? input.quantity : 0) };
+  return { batchId: id, status: "posted", transformationId, previousPending: previous.pending, newPending: previous.pending - input.quantity, previousReady: previous.ready, newReady: previous.ready + input.quantity };
 }
 
 export async function reverseTreatmentBatch(id: number | string, input: { performedAt: string; responsible: string; note: string }): Promise<TreatmentRecordResult> {
@@ -2382,7 +2333,7 @@ export async function reverseTreatmentBatch(id: number | string, input: { perfor
     { ...base, id: `movement-${memoryTreatmentId++}`, stockState: "pending_treatment", quantity: original.quantity, movementType: "treatment_reversal_in" },
   ];
   original.reversedByBatchId = reversalId;
-  memoryTreatmentBatches.push({ ...original, id: reversalId, status: "reversal", reversalOfBatchId: original.id, reversedByBatchId: undefined, performedAt: input.performedAt, responsible: input.responsible.trim(), note: input.note.trim(), createdAt: new Date().toISOString(), checks: [], movements });
+  memoryTreatmentBatches.push({ ...original, id: reversalId, status: "reversal", reversalOfBatchId: original.id, reversedByBatchId: undefined, performedAt: input.performedAt, responsible: input.responsible.trim(), note: input.note.trim(), createdAt: new Date().toISOString(), movements });
   memoryStockMovements.push(...movements);
   refreshMemoryTreatmentProgress(original.orderLineId);
   return { batchId: reversalId, status: "reversal", transformationId, previousPending: previous.pending, newPending: previous.pending + original.quantity, previousReady: previous.ready, newReady: previous.ready - original.quantity };
@@ -2481,11 +2432,6 @@ export async function getStockDetail(productId: string): Promise<StockDetail | n
   }
   const movementRows = await supabaseRequest<DbStockMovementRow[]>(`/rest/v1/stock_movements?select=*&product_id=eq.${encodeURIComponent(productId)}&order=performed_at.desc,id.desc&limit=150`);
   return { summary, movements: movementRows.map(mapStockMovement) };
-}
-
-export async function getStockImportReport() {
-  if (useMemoryStore) return [];
-  return supabaseRequest<Array<{ id: number; source_file: string; source_catalog: string; as_of_date: string; expected_pending: number; expected_ready: number; source_reported_pending: number | null; source_reported_ready: number | null; status: string; note: string | null }>>("/rest/v1/stock_import_runs?select=*&order=source_catalog.asc");
 }
 
 export async function recordStockReceipt(input: { productId: string; stockState: StockMovement["stockState"]; quantity: number; movementType: "internal_production" | "supplier_receipt" | "return"; providerId?: string; sourceReference?: string; occurredAt: string; responsible: string; note?: string }) {

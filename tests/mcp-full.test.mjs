@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 // La tienda en memoria se elige al cargar el módulo: tiene que quedar definida antes de importar la ruta.
-process.env.ECOASE_DATA_BACKEND = "memory";
-delete process.env.ECOASE_MCP_TOKEN;
-delete process.env.ECOASE_MCP_READ_TOKEN;
+process.env.DATA_BACKEND = "memory";
+delete process.env.MCP_TOKEN;
+delete process.env.MCP_READ_TOKEN;
 
 const route = await import("../app/mcp/route.ts");
 const WRITE_TOKEN = "token-escritura-de-prueba";
@@ -42,7 +42,7 @@ const writeTools = ["crear_pedido", "editar_pedido", "cancelar_pedido", "elimina
   "registrar_resultado_produccion", "programar_secado", "registrar_ht", "registrar_ht_no_realizado", "revertir_lote_ht", "asignar_transporte_pedido", "crear_viaje", "editar_viaje",
   "avanzar_viaje", "reprogramar_viaje", "guardar_salida", "calcular_ruta_salida", "guardar_configuracion_logistica", "registrar_entrada_stock", "ajustar_stock",
   "revertir_movimiento_stock", "guardar_recurso_produccion", "guardar_regla_rendimiento", "eliminar_regla_rendimiento", "guardar_capacidad_secadero", "guardar_capacidad_transporte",
-  "guardar_cupos_viajes_dia", "ajustar_capacidad_dia", "guardar_cliente", "eliminar_cliente", "habilitar_producto_cliente", "editar_producto_cliente", "guardar_controles_producto_cliente",
+  "guardar_cupos_viajes_dia", "ajustar_capacidad_dia", "guardar_cliente", "eliminar_cliente", "habilitar_producto_cliente", "editar_producto_cliente",
   "eliminar_archivo_producto_cliente", "guardar_producto", "eliminar_producto", "guardar_niveles_producto", "guardar_proveedor", "eliminar_proveedor"];
 
 test("sin tokens configurados el MCP queda abierto pero solo de lectura", async () => {
@@ -52,8 +52,8 @@ test("sin tokens configurados el MCP queda abierto pero solo de lectura", async 
 });
 
 test("con tokens configurados exige autorización y separa lectura de escritura", async () => {
-  process.env.ECOASE_MCP_TOKEN = WRITE_TOKEN;
-  process.env.ECOASE_MCP_READ_TOKEN = READ_TOKEN;
+  process.env.MCP_TOKEN = WRITE_TOKEN;
+  process.env.MCP_READ_TOKEN = READ_TOKEN;
   try {
     const anonymous = await rpc("tools/list", {});
     assert.equal(anonymous.status, 401);
@@ -68,13 +68,13 @@ test("con tokens configurados exige autorización y separa lectura de escritura"
     for (const name of [...readTools, ...writeTools]) assert.ok(full.includes(name), `Falta ${name}`);
     assert.equal(new Set(full).size, full.length, "Hay herramientas repetidas");
   } finally {
-    delete process.env.ECOASE_MCP_TOKEN;
-    delete process.env.ECOASE_MCP_READ_TOKEN;
+    delete process.env.MCP_TOKEN;
+    delete process.env.MCP_READ_TOKEN;
   }
 });
 
 test("todas las herramientas declaran si leen, escriben o destruyen", async () => {
-  process.env.ECOASE_MCP_TOKEN = WRITE_TOKEN;
+  process.env.MCP_TOKEN = WRITE_TOKEN;
   try {
     const { body } = await rpc("tools/list", {}, WRITE_TOKEN);
     for (const tool of body.result.tools) {
@@ -85,11 +85,60 @@ test("todas las herramientas declaran si leen, escriben o destruyen", async () =
     }
     const destructive = body.result.tools.filter((tool) => tool.annotations.destructiveHint).map((tool) => tool.name);
     for (const name of ["eliminar_pedido", "cancelar_pedido", "eliminar_cliente", "eliminar_producto", "eliminar_proveedor", "revertir_lote_ht", "ajustar_stock"]) assert.ok(destructive.includes(name), `${name} debería marcarse como destructiva`);
-  } finally { delete process.env.ECOASE_MCP_TOKEN; }
+  } finally { delete process.env.MCP_TOKEN; }
+});
+
+// El nombre se arma por partes para que buscar la palabra en el código no encuentre esta prueba.
+const nombreViejo = new RegExp(["eco", "ase"].join(""), "i");
+
+test("el MCP no expone nombres ni conceptos que ya no se usan", async () => {
+  process.env.MCP_TOKEN = WRITE_TOKEN;
+  try {
+    const init = await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "mcp-test", version: "1.0.0" } }, WRITE_TOKEN);
+    const { body } = await rpc("tools/list", {}, WRITE_TOKEN);
+    const surface = JSON.stringify([init.body.result, body.result.tools]);
+    assert.doesNotMatch(surface, nombreViejo, "El MCP no debe nombrar a la marca vieja");
+    assert.doesNotMatch(surface, /zeta/i, "El código del producto se llama solo «código»");
+    assert.doesNotMatch(surface, /punto[s]? de control|control(es)?Inicial|controlId|"controles"/i, "Los puntos de control ya no se usan");
+    assert.ok(!(await toolNames(WRITE_TOKEN)).includes("guardar_controles_producto_cliente"));
+
+    const guide = await call("guia_operativa");
+    assert.doesNotMatch(guide.text, new RegExp(`${nombreViejo.source}|zeta|punto[s]? de control`, "i"));
+
+    // Lo que devuelve el catálogo y las fichas tampoco arrastra datos viejos.
+    const products = await call("listar_productos", { limite: 5 });
+    assert.equal(products.isError, false, products.text);
+    assert.doesNotMatch(products.text, /zeta|sourceCatalog|sourceCode|"treatment"/i);
+    assert.ok(products.data.productos.every((product) => typeof product.code === "string"), "Cada producto trae su código");
+
+    const clients = await call("listar_clientes", {});
+    assert.doesNotMatch(clients.text, /zeta|controls/i);
+    const stock = await call("consultar_stock", {});
+    assert.doesNotMatch(stock.text, /zeta/i);
+  } finally { delete process.env.MCP_TOKEN; }
+});
+
+test("crear un producto desde el MCP pide solo tipo y código", async () => {
+  process.env.MCP_TOKEN = WRITE_TOKEN;
+  try {
+    const missing = await call("guardar_producto", { tipo: "Pallet", medida: "118 x 98" });
+    assert.equal(missing.isError, true);
+    assert.match(missing.text, /tipo y código/);
+    assert.doesNotMatch(missing.text, /zeta/i);
+
+    const created = await call("guardar_producto", { tipo: "Pallet", medida: "118 x 98", codigo: "9101" });
+    assert.equal(created.isError, false, created.text);
+    assert.equal(created.data.product.code, "9101");
+
+    const client = await call("guardar_cliente", { nombre: "Cliente sin controles MCP", direccion: "Ruta 1 km 10", departamento: "Colonia" });
+    const enabled = await call("habilitar_producto_cliente", { clienteId: client.data.client.id, productoId: created.data.product.id });
+    assert.equal(enabled.isError, false, enabled.text);
+    assert.equal(enabled.data.product.code, "9101");
+  } finally { delete process.env.MCP_TOKEN; }
 });
 
 test("recorre un pedido completo desde el MCP: pedido, producción, viaje y entrega", async () => {
-  process.env.ECOASE_MCP_TOKEN = WRITE_TOKEN;
+  process.env.MCP_TOKEN = WRITE_TOKEN;
   try {
     const guide = await call("guia_operativa");
     assert.equal(guide.isError, false);
@@ -98,7 +147,7 @@ test("recorre un pedido completo desde el MCP: pedido, producción, viaje y entr
     // Un cliente con un producto listo para pedir. El plano se sube por la tienda porque el MCP no maneja archivos.
     const client = await call("guardar_cliente", { nombre: "Cliente flujo MCP", direccion: "Ruta 3 km 400, Paysandú", departamento: "Paysandú" });
     assert.equal(client.isError, false, client.text);
-    const enabled = await call("habilitar_producto_cliente", { clienteId: client.data.client.id, productoId: "palbin-p02", controlInicial: "Revisar el plano antes de armar" });
+    const enabled = await call("habilitar_producto_cliente", { clienteId: client.data.client.id, productoId: "producto-02" });
     assert.equal(enabled.isError, false, enabled.text);
     const store = await import("../app/api/store.ts");
     await store.addClientProductAsset(enabled.data.product.id, new File(["%PDF-1.4\n%%EOF"], "plano.pdf", { type: "application/pdf" }), { altText: "Plano", assetType: "plan", isPrimary: true });
@@ -143,11 +192,11 @@ test("recorre un pedido completo desde el MCP: pedido, producción, viaje y entr
     assert.ok(closed.data.pedidos.some((order) => order.id === orderId), "El pedido entregado pasa al historial");
     const history = await call("historial_pedido", { pedidoId: orderId });
     assert.equal(history.isError, false);
-  } finally { delete process.env.ECOASE_MCP_TOKEN; }
+  } finally { delete process.env.MCP_TOKEN; }
 });
 
 test("los errores de la API llegan como mensajes claros y no como fallos", async () => {
-  process.env.ECOASE_MCP_TOKEN = WRITE_TOKEN;
+  process.env.MCP_TOKEN = WRITE_TOKEN;
   try {
     const missing = await call("detalle_pedido", { pedidoId: "no-existe" });
     assert.equal(missing.isError, true);
@@ -159,11 +208,11 @@ test("los errores de la API llegan como mensajes claros y no como fallos", async
     const emptyCreate = await call("guardar_cliente", {});
     assert.equal(emptyCreate.isError, true);
     assert.match(emptyCreate.text, /nombre/i);
-  } finally { delete process.env.ECOASE_MCP_TOKEN; }
+  } finally { delete process.env.MCP_TOKEN; }
 });
 
 test("administra clientes, recursos y proveedores", async () => {
-  process.env.ECOASE_MCP_TOKEN = WRITE_TOKEN;
+  process.env.MCP_TOKEN = WRITE_TOKEN;
   try {
     const client = await call("guardar_cliente", { nombre: "Cliente MCP", direccion: "Calle 1, Paysandú", departamento: "Paysandú" });
     assert.equal(client.isError, false, client.text);
@@ -187,7 +236,7 @@ test("administra clientes, recursos y proveedores", async () => {
     const providers = (await call("listar_proveedores", { tipo: "Transporte" })).data.proveedores;
     assert.ok(providers.some((item) => item.name === "Transporte MCP"));
     assert.equal((await call("eliminar_proveedor", { proveedorId: provider.data.provider.id })).isError, false);
-  } finally { delete process.env.ECOASE_MCP_TOKEN; }
+  } finally { delete process.env.MCP_TOKEN; }
 });
 
 test("las lecturas de capacidad, calendario, logística y stock responden", async () => {

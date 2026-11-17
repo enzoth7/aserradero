@@ -198,7 +198,7 @@ export function registerOperationTools(server: McpServer, context: ToolContext) 
   apiTool(server, context, {
     name: "registrar_ht",
     title: "Registrar un tratamiento HT realizado",
-    description: "Registra unidades tratadas con HT: pasan de «pendiente de HT» a «listas». Si el stock pendiente no alcanza (producción sin cargar), se guarda igual y el saldo queda negativo como advertencia. Para asociarlo a un pedido indicá lineaPedidoId (de detalle_pedido); sin línea es stock general. Los controles son opcionales.",
+    description: "Registra unidades tratadas con HT: pasan de «pendiente de HT» a «listas». Si el stock pendiente no alcanza (producción sin cargar), se guarda igual y el saldo queda negativo como advertencia. Para asociarlo a un pedido indicá lineaPedidoId (de detalle_pedido); sin línea es stock general.",
     access: "write",
     input: {
       productoId: identificador("ID del producto (de opciones_ht)."),
@@ -207,12 +207,7 @@ export function registerOperationTools(server: McpServer, context: ToolContext) 
       responsable,
       lineaPedidoId: z.string().optional().describe("Línea del pedido a la que corresponde."),
       clienteProductoId: identificador("Relación cliente-producto (se deduce de la línea si se indica).").optional(),
-      nota: z.string().optional().describe("Observación. Obligatoria solo si algún control es «No conforme»."),
-      controles: z.array(z.object({
-        controlId: identificador("ID del punto de control (de opciones_ht)."),
-        resultado: z.enum(["pass", "fail"]).describe("pass = conforme; fail = no conforme (exige nota)."),
-        nota: z.string().optional(),
-      })).optional(),
+      nota: z.string().optional().describe("Observación opcional."),
     },
     request: (args) => ({
       method: "POST",
@@ -220,7 +215,6 @@ export function registerOperationTools(server: McpServer, context: ToolContext) 
       body: clean({
         productId: String(args.productoId), quantity: args.cantidad, performedAt: args.momento ?? new Date().toISOString(),
         responsible: args.responsable ?? RESPONSABLE, orderLineId: args.lineaPedidoId, clientProductId: args.clienteProductoId, note: args.nota,
-        controls: args.controles?.map((control) => ({ controlId: control.controlId, result: control.resultado, note: control.nota })) ?? [],
       }),
     }),
     summary: "HT registrado.",

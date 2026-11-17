@@ -31,15 +31,15 @@ function textResult(summary: string, data: unknown) {
   };
 }
 
-export type EcoaseMcpOptions = { canWrite?: boolean };
+export type McpOptions = { canWrite?: boolean };
 
-export function createEcoaseMcpServer(options: EcoaseMcpOptions = {}) {
+export function createMcpServer(options: McpOptions = {}) {
   const context: ToolContext = { canWrite: Boolean(options.canWrite) };
   const server = new McpServer(
-    { name: "ecoase-control-operativo", version: "1.0.0" },
+    { name: "control-operativo", version: "1.0.0" },
     {
       instructions: [
-        "Control operativo de Ecoase: pedidos, producción, secadero y HT, logística, stock, capacidad, clientes, productos y proveedores.",
+        "Control operativo: pedidos, producción, secadero y HT, logística, stock, capacidad, clientes, productos y proveedores.",
         "Empezá con guia_operativa si no conocés el flujo. Para saber qué pasa usá resumen_operativo, listar_pedidos, detalle_pedido y calendario; informá siempre el período consultado y no presentes una alerta como certeza si depende de datos faltantes.",
         options.canWrite
           ? "Esta conexión puede modificar datos: antes de crear, cambiar, cancelar, borrar o revertir, confirmá con la persona lo que vas a hacer (salvo que ya lo haya pedido de forma explícita) y, después de escribir, volvé a leer para verificar el resultado."
@@ -52,8 +52,8 @@ export function createEcoaseMcpServer(options: EcoaseMcpOptions = {}) {
   server.registerTool(
     "resumen_operativo",
     {
-      title: "Resumen operativo de Ecoase",
-      description: "Resume pedidos abiertos, entregas y alertas de Ecoase para un período. Usalo para preguntas como qué pasa en los próximos días o qué cambió en la operación.",
+      title: "Resumen operativo",
+      description: "Resume pedidos abiertos, entregas y alertas para un período. Usalo para preguntas como qué pasa en los próximos días o qué cambió en la operación.",
       inputSchema: {
         desde: z.string().regex(isoDate).optional().describe("Fecha inicial YYYY-MM-DD. Por defecto, hoy en Uruguay."),
         hasta: z.string().regex(isoDate).optional().describe("Fecha final YYYY-MM-DD. Por defecto, 50 días desde la fecha inicial."),
@@ -126,7 +126,7 @@ export function createEcoaseMcpServer(options: EcoaseMcpOptions = {}) {
     "ver_pedido",
     {
       title: "Ver un pedido",
-      description: "Busca un pedido de Ecoase por ID, referencia o nombre de cliente y devuelve su estado, productos, producción, HT y viajes.",
+      description: "Busca un pedido por ID, referencia o nombre de cliente y devuelve su estado, productos, producción, HT y viajes.",
       inputSchema: { consulta: z.string().min(1).describe("ID, referencia o nombre del cliente.") },
       outputSchema: { data: z.unknown() },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -144,7 +144,7 @@ export function createEcoaseMcpServer(options: EcoaseMcpOptions = {}) {
     "listar_clientes",
     {
       title: "Listar clientes y productos",
-      description: "Busca clientes de Ecoase y muestra los productos habilitados para cada uno. Usalo para saber qué compra o utiliza un cliente.",
+      description: "Busca clientes y muestra los productos habilitados para cada uno. Usalo para saber qué compra o utiliza un cliente.",
       inputSchema: { consulta: z.string().optional().describe("Parte del nombre del cliente. Si se omite, lista todos.") },
       outputSchema: { data: z.unknown() },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -160,13 +160,13 @@ export function createEcoaseMcpServer(options: EcoaseMcpOptions = {}) {
         department: detail.client.department,
         active: detail.client.active,
         updatedAt: detail.client.updatedAt,
-        products: detail.products.filter((product) => product.active).map((product) => ({
+        // Igual que la ficha del cliente: sin productos dados de baja en el catálogo.
+        products: detail.products.filter((product) => product.active && product.product.stockActive !== false).map((product) => ({
           id: product.productId,
           clientProductId: product.id,
           name: product.operationalName ?? product.product.stockName ?? `${product.product.kind} ${product.product.measure ?? ""}`.trim(),
-          zetaCode: product.product.zetaCode ?? product.zetaCode,
+          code: product.product.code ?? product.code,
           requiresTreatment: product.product.requiresTreatment,
-          controls: product.controls.filter((control) => control.active).map((control) => control.title),
         })),
       }));
       return textResult(`Encontré ${data.length} cliente(s).`, data);
@@ -187,13 +187,13 @@ export function createEcoaseMcpServer(options: EcoaseMcpOptions = {}) {
     async ({ consulta }) => {
       const needle = normalize(consulta ?? "");
       const rows = (await getStockSummary()).filter((row) => {
-        const searchable = [row.product.id, row.product.stockName, row.product.kind, row.product.measure, row.product.zetaCode].filter(Boolean).join(" ");
+        const searchable = [row.product.id, row.product.stockName, row.product.kind, row.product.measure, row.product.code].filter(Boolean).join(" ");
         return !needle || normalize(searchable).includes(needle);
       });
       const data = rows.map((row) => ({
         productId: row.product.id,
         product: row.product.stockName ?? `${row.product.kind} ${row.product.measure ?? ""}`.trim(),
-        zetaCode: row.product.zetaCode,
+        code: row.product.code,
         pendingTreatment: row.pending,
         ready: row.ready,
         reserved: row.reserved,

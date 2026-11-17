@@ -69,9 +69,9 @@ export default function TreatmentResults({ orders, products, productsRequiringTr
       const batches = week?.batches.filter((batch) => batch.orderLineId === line.lineId && dateKey.format(new Date(batch.performedAt)) === day) ?? [];
       const actual = batches.reduce((sum, batch) => sum + (batch.status === "posted" && !batch.reversedByBatchId ? batch.quantity : 0), 0);
       const missed = week?.notPerformed.find((item) => item.orderLineId === line.lineId && item.date === day);
-      if (planned === 0 && !actual && !missed && !batches.some((batch) => batch.status === "rejected")) return [];
+      if (planned === 0 && !actual && !missed) return [];
       return [{
-        order, line, planned, actual, missed, rejected: batches.some((batch) => batch.status === "rejected"),
+        order, line, planned, actual, missed,
         canRecord: day <= today && !isOrderClosed(order) && actual < planned,
       }];
     }));
@@ -92,16 +92,16 @@ export default function TreatmentResults({ orders, products, productsRequiringTr
     <FieldError id="treatment-week-error">{current?.error}</FieldError>
     {!current && <LoadingState label="Cargando el HT programado" rows={3} />}
     {week && (tableRows.length ? <div className="logistics-real-table treatment-real-board"><table aria-label="Resultados de HT" data-column-filters="off"><thead><tr><th scope="col">Fecha prevista</th><th scope="col">Producto</th><th scope="col">Cliente</th><th scope="col">Planificado</th><th scope="col">Real</th><th scope="col">Estado</th><th scope="col">Resultado</th></tr></thead><tbody>
-      {tableRows.map(({ day, order, line, planned, actual, missed, rejected, canRecord }) => {
+      {tableRows.map(({ day, order, line, planned, actual, missed, canRecord }) => {
         const status = actual > 0 ? actual >= planned ? "HT realizado" : "HT parcial"
-          : missed ? "No se hizo" : rejected ? "No conforme" : "Planificado";
-        const tone = status === "HT realizado" ? "green" : status === "No se hizo" || status === "No conforme" ? "red" : "yellow";
+          : missed ? "No se hizo" : "Planificado";
+        const tone = status === "HT realizado" ? "green" : status === "No se hizo" ? "red" : "yellow";
         return <tr key={`${day}-${line.lineId}`}>
           <td><time dateTime={day}>{shortDay.format(parseDryingDay(day))}</time></td>
           <td><strong>{line.product}</strong></td>
           <td>{order.client}</td>
           <td>{planned ? number.format(planned) : "–"}</td>
-          <td>{actual || missed || rejected ? number.format(actual) : "Pendiente"}</td>
+          <td>{actual || missed ? number.format(actual) : "Pendiente"}</td>
           <td><span className={`logistics-status ${tone}`}>{status}</span></td>
           <td>{canRecord ? <button type="button" className="secondary-button" onClick={() => onRecord({
             orderId: order.id, lineId: line.lineId, productId: line.productId, product: line.product, client: order.client,

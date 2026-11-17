@@ -4,7 +4,7 @@
  * Claude en el celular y en la web solo se conecta a servidores remotos mediante OAuth (no admite un
  * encabezado con token propio). Este módulo permite que esa conexión funcione sin guardar nada: los
  * códigos, los tokens y los clientes registrados son datos firmados con HMAC. La clave se deriva del
- * token del MCP, de modo que rotar ECOASE_MCP_TOKEN cierra todas las sesiones abiertas.
+ * token del MCP, de modo que rotar MCP_TOKEN cierra todas las sesiones abiertas.
  */
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
@@ -19,8 +19,8 @@ const b64 = (value: Buffer | string) => Buffer.from(value).toString("base64url")
 const now = () => Math.floor(Date.now() / 1000);
 
 function secret() {
-  const base = process.env.ECOASE_MCP_TOKEN?.trim() || process.env.ECOASE_MCP_READ_TOKEN?.trim();
-  return base ? createHmac("sha256", "ecoase-oauth-v1").update(base).digest() : null;
+  const base = process.env.MCP_TOKEN?.trim() || process.env.MCP_READ_TOKEN?.trim();
+  return base ? createHmac("sha256", "oauth-v1").update(base).digest() : null;
 }
 
 /** OAuth solo existe cuando hay tokens configurados; sin ellos el MCP es de solo lectura abierta. */
@@ -69,16 +69,16 @@ function same(a: string, b?: string) {
 /** Código que escribe la persona en la pantalla de autorización. */
 export function accessForCode(code: string): Scope | null {
   const typed = code.trim();
-  if (same(typed, process.env.ECOASE_MCP_PASSWORD?.trim()) || same(typed, process.env.ECOASE_MCP_TOKEN?.trim())) return "write";
-  if (same(typed, process.env.ECOASE_MCP_READ_TOKEN?.trim())) return "read";
+  if (same(typed, process.env.MCP_PASSWORD?.trim()) || same(typed, process.env.MCP_TOKEN?.trim())) return "write";
+  if (same(typed, process.env.MCP_READ_TOKEN?.trim())) return "read";
   return null;
 }
 
 /** Permiso que da un Bearer del MCP: token fijo o token OAuth firmado. */
 export function accessForBearer(sent: string): Scope | null {
   if (!sent) return null;
-  if (same(sent, process.env.ECOASE_MCP_TOKEN?.trim())) return "write";
-  if (same(sent, process.env.ECOASE_MCP_READ_TOKEN?.trim())) return "read";
+  if (same(sent, process.env.MCP_TOKEN?.trim())) return "write";
+  if (same(sent, process.env.MCP_READ_TOKEN?.trim())) return "read";
   const access = verify(sent, "access");
   return access?.scope === "write" ? "write" : access?.scope === "read" ? "read" : null;
 }
@@ -132,7 +132,7 @@ export function allowedRedirect(uri: string) {
 
 /** Dirección pública del servidor tal como la ve quien se conecta. */
 export function publicOrigin(request: Request) {
-  const configured = process.env.ECOASE_PUBLIC_URL?.trim().replace(/\/$/, "");
+  const configured = process.env.PUBLIC_URL?.trim().replace(/\/$/, "");
   if (configured) return configured;
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? new URL(request.url).host;
   const local = /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host);

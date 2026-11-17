@@ -408,7 +408,7 @@ export default function ProductionPlanningView({ orders, products, levels, refre
     {selectedAssignment && <ModalShell title="Detalle de producción" description={selectedAssignment.assignment.orderReference} onClose={() => setSelectedAssignment(null)} className="production-detail-modal">
       <dl className="production-detail-list">
         <div><dt>Producto</dt><dd>{selectedProduct ? productLabel(selectedProduct) : selectedAssignment.assignment.productName}</dd></div>
-        {selectedProduct?.zetaCode && <div><dt>Código</dt><dd>{selectedProduct.zetaCode}</dd></div>}
+        {selectedProduct?.code && <div><dt>Código</dt><dd>{selectedProduct.code}</dd></div>}
         {selectedProduct && <div><dt>Tipo</dt><dd>{selectedProduct.kind}</dd></div>}
         {selectedProduct && levels.filter((level) => selectedProduct.attributes?.[level.id]).map((level) => <div key={level.id}><dt>{level.label}</dt><dd>{selectedProduct.attributes?.[level.id]}</dd></div>)}
         <div><dt>Cliente</dt><dd>{selectedAssignment.assignment.client}</dd></div>

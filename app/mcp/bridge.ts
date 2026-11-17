@@ -18,7 +18,7 @@ export type ApiResponse = { ok: boolean; status: number; data: unknown };
 export async function callApi({ method, path, query, body }: ApiRequest): Promise<ApiResponse> {
   // Import dinámico: el despachador carga el mapa de rutas, que a su vez carga la ruta del MCP.
   const { dispatch } = await import("../../server/router");
-  const url = new URL(`http://interno.ecoase${path}`);
+  const url = new URL(`http://interno.local${path}`);
   for (const [key, value] of Object.entries(query ?? {})) if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
   const init: RequestInit = { method, headers: { accept: "application/json", ...(body !== undefined ? { "content-type": "application/json" } : {}) } };
   if (body !== undefined) init.body = JSON.stringify(body);

@@ -1,4 +1,4 @@
-# Ecoase Dashboard
+# Dashboard de control operativo
 
 Dashboard web de control operativo construido con React y Vite. La interfaz cambia de sección sin recargar el documento. La API y MCP se ejecutan en Node.
 
@@ -62,9 +62,9 @@ En el calendario de producción, cada tarjeta muestra el producto y las unidades
 
 Los pedidos, sus líneas, los proveedores y el historial de cambios se guardan en Supabase. Las vistas de clientes, calendario, logística, producción, marcado y stock se calculan a partir de esos datos.
 
-## MCP de Ecoase
+## MCP
 
-`/mcp` expone un servidor MCP completo del dashboard: todo lo que se puede ver o hacer en la aplicación se puede hacer desde Claude (67 herramientas). Cada herramienta llama a la misma ruta de `/api/*` que usa la pantalla, así que respeta las mismas validaciones y efectos.
+`/mcp` expone un servidor MCP completo del dashboard: todo lo que se puede ver o hacer en la aplicación se puede hacer desde Claude (66 herramientas). Cada herramienta llama a la misma ruta de `/api/*` que usa la pantalla, así que respeta las mismas validaciones y efectos.
 
 **Qué cubre**
 
@@ -75,7 +75,7 @@ Los pedidos, sus líneas, los proveedores y el historial de cambios se guardan e
 - Logística: asignar transporte, crear, editar, avanzar y reprogramar viajes, agendar salidas, calcular rutas y configurar flota, jornada y límites.
 - Stock: entradas, ajustes y reversiones.
 - Capacidad: recursos, reglas de rendimiento, secadero, cupos de viajes y ajustes por día.
-- Maestros: clientes, productos habilitados y controles, catálogo, niveles de clasificación y proveedores.
+- Maestros: clientes, productos habilitados, catálogo, niveles de clasificación y proveedores.
 
 Capacidad, stock y fechas son advertencias: las herramientas guardan igual e informan. Solo se rechaza lo incoherente (más unidades que las del pedido, datos inválidos, resultado real con fecha futura). Las herramientas que borran, cancelan o revierten están marcadas como destructivas para que Claude pida confirmación.
 
@@ -83,28 +83,28 @@ Capacidad, stock y fechas son advertencias: las herramientas guardan igual e inf
 
 | Variable de entorno | Efecto |
 | --- | --- |
-| `ECOASE_MCP_TOKEN` | Token con permiso de lectura y escritura. |
-| `ECOASE_MCP_READ_TOKEN` | Token de solo lectura (opcional). |
+| `MCP_TOKEN` | Token con permiso de lectura y escritura. |
+| `MCP_READ_TOKEN` | Token de solo lectura (opcional). |
 | ninguna | El MCP queda abierto pero solo de lectura. Las herramientas de escritura no se registran. |
 
 Con algún token configurado, cada pedido debe enviar `Authorization: Bearer <token>`; sin él responde 401. Generá un token con `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` y cargalo como variable de entorno del servidor (nunca en el código). El token es compartido: quién hizo cada cambio se registra con el campo `responsable` de las herramientas (por defecto «Claude (MCP)»), no con una identidad individual. Importante: el token protege solo `/mcp`; las rutas `/api/*` de la aplicación no tienen autenticación.
 
 **Desde el celular (y la web de Claude)**
 
-La app de Claude se conecta por OAuth, no por encabezados. El servidor ya lo incluye, sin base de datos (los códigos y tokens son datos firmados; rotar `ECOASE_MCP_TOKEN` cierra todas las sesiones):
+La app de Claude se conecta por OAuth, no por encabezados. El servidor ya lo incluye, sin base de datos (los códigos y tokens son datos firmados; rotar `MCP_TOKEN` cierra todas las sesiones):
 
-1. En claude.ai (web, con la cuenta que usan): Configuración → Conectores → Agregar conector personalizado. Nombre `Ecoase` y URL `https://dashboardoperativo.vercel.app/mcp`. No hace falta completar la configuración avanzada.
-2. Claude abre la página «Conectar a Ecoase»: se escribe el código de acceso (`ECOASE_MCP_PASSWORD`; también sirve `ECOASE_MCP_TOKEN` para escritura o `ECOASE_MCP_READ_TOKEN` para solo lectura).
+1. En claude.ai (web, con la cuenta que usan): Configuración → Conectores → Agregar conector personalizado. Nombre `Control operativo` y URL `https://dashboardoperativo.vercel.app/mcp`. No hace falta completar la configuración avanzada.
+2. Claude abre la página «Conectar al control operativo»: se escribe el código de acceso (`MCP_PASSWORD`; también sirve `MCP_TOKEN` para escritura o `MCP_READ_TOKEN` para solo lectura).
 3. El conector queda disponible en la app del celular con la misma cuenta, a cualquier hora. La sesión dura 90 días y se renueva sola al usarla.
 
 Si el formulario del conector (ChatGPT o Claude) pide Client ID y Client secret, se dejan vacíos: el servidor registra al cliente solo. Si se cargan a mano, se aceptan igual mientras la conexión vuelva a chatgpt.com o claude.ai; el código de acceso se escribe siempre en la página de autorización, nunca en esos campos.
 
-Variables: `ECOASE_MCP_PASSWORD` (código para escribir al conectar, más fácil de tipear que el token) y `ECOASE_PUBLIC_URL` (dirección pública, para que los enlaces de OAuth no dependan del dominio con el que se entre).
+Variables: `MCP_PASSWORD` (código para escribir al conectar, más fácil de tipear que el token) y `PUBLIC_URL` (dirección pública, para que los enlaces de OAuth no dependan del dominio con el que se entre).
 
 **Conexión**
 
-- Claude Code (la dirección de producción es la primera; `ecoase.vercel.app` solo redirige): `claude mcp add --transport http ecoase https://dashboardoperativo.vercel.app/mcp --header "Authorization: Bearer TU_TOKEN"`
-- Claude Desktop: los conectores personalizados de la interfaz no permiten enviar un encabezado propio; usá el puente `mcp-remote` en `claude_desktop_config.json`: `{ "mcpServers": { "ecoase": { "command": "npx", "args": ["-y", "mcp-remote", "https://dashboardoperativo.vercel.app/mcp", "--header", "Authorization:${ECOASE_AUTH}"], "env": { "ECOASE_AUTH": "Bearer TU_TOKEN" } } } }`
+- Claude Code: `claude mcp add --transport http control-operativo https://dashboardoperativo.vercel.app/mcp --header "Authorization: Bearer TU_TOKEN"`
+- Claude Desktop: los conectores personalizados de la interfaz no permiten enviar un encabezado propio; usá el puente `mcp-remote` en `claude_desktop_config.json`: `{ "mcpServers": { "control-operativo": { "command": "npx", "args": ["-y", "mcp-remote", "https://dashboardoperativo.vercel.app/mcp", "--header", "Authorization:${MCP_AUTH}"], "env": { "MCP_AUTH": "Bearer TU_TOKEN" } } } }`
 - Pruebas locales: iniciá la aplicación y conectá MCP Inspector a `http://localhost:3000/mcp` con Streamable HTTP. Los tests son `npm run test:mcp` (incluye un pedido completo de punta a punta).
 
 Las herramientas de archivos (subir planos o fotos) no están en el MCP; se hacen desde la pantalla de Clientes.

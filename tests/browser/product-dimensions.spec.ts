@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("el editor calcula superficie y conserva altura sin agregar columnas al catálogo", async ({ page }) => {
   const code = String(Date.now());
   const created = await page.request.post("/api/products", {
-    data: { kind: "Pallet", measure: "120 x 100", zetaCode: code },
+    data: { kind: "Pallet", measure: "120 x 100", code: code },
   });
   expect(created.ok()).toBeTruthy();
   const { product } = await created.json();

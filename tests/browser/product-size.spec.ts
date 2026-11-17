@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("el catálogo clasifica por superficie y permite corregir y restablecer el tamaño", async ({ page }) => {
   const code = String(Date.now());
   const created = await page.request.post("/api/products", {
-    data: { kind: "Pallet", measure: "122 x 102", zetaCode: code, attributes: { modelo: `Tamaño ${code}` } },
+    data: { kind: "Pallet", measure: "122 x 102", code: code, attributes: { modelo: `Tamaño ${code}` } },
   });
   expect(created.ok()).toBeTruthy();
 

@@ -34,7 +34,6 @@ export interface ShipmentLine {
   shipmentId: number | string;
   orderLineId: string;
   product: string;
-  treatment?: ProductTreatment;
   plannedQuantity: number;
   loadedQuantity?: number;
   deliveredQuantity: number;
@@ -83,7 +82,7 @@ export interface OrderLine {
   clientProductId?: number | string;
   quantity: number;
   preparation?: string;
-  treatment?: ProductTreatment;
+  requiresTreatment?: boolean;
   treatedQuantity?: number;
   treatmentPendingQuantity?: number;
   readyReservedQuantity?: number;
@@ -109,7 +108,6 @@ export interface OperationOrder {
   originalPlannedDate?: string;
   orderDate?: string;
   requestedDeliveryDate?: string;
-  zetaCode?: string;
   transport: string;
   transportSource?: TransportSource;
   transportProviderId?: string;
@@ -175,7 +173,7 @@ export const orderOperationalStatusLabels: Record<OrderOperationalStatus, string
   cancelled: "Cancelado",
 };
 
-const lineRequiresHeat = (line: OrderLine) => /HT/.test(line.treatment ?? "") || /\bCon HT\b/i.test(line.product);
+const lineRequiresHeat = (line: OrderLine) => Boolean(line.requiresTreatment) || /\bCon HT\b/i.test(line.product);
 
 /** Palets del pedido repartidos por etapa. Cada palet cuenta una sola vez, en la etapa más avanzada que alcanzó. */
 export function getOrderPalletStages(order: OperationOrder) {
@@ -281,50 +279,35 @@ export interface Client {
 }
 
 export type ProductKind = "Pallet" | "Piso" | "Bin";
-export type ProductTreatment = "Marcado" | "HT" | "Marcado y HT";
-type ProductCatalog = "Palbin" | "Pamer";
 
 export interface Product {
   id: string;
   kind: ProductKind;
   measure?: string;
   heightCm?: number;
-  treatment?: ProductTreatment;
   requiresTreatment: boolean;
   stockName?: string;
-  sourceCatalog?: "Palbin" | "Pamer" | "Manual";
-  sourceCode?: string;
-  zetaCode?: string;
+  code?: string;
   stockActive?: boolean;
   clientNames?: string[];
   /** Valor por nivel (entrada, taco, refuerzo, exportación, tratamiento…). Ver classification.ts. Los productos viejos no lo tienen. */
   attributes?: Record<string, string>;
 }
 
-/** Ordena P01, P02, P10 por su valor numérico, no por el texto del código. */
-export function compareProductsByInternalCode(left: Pick<Product, "sourceCode" | "zetaCode" | "stockName" | "id">, right: Pick<Product, "sourceCode" | "zetaCode" | "stockName" | "id">) {
+/** Ordena los códigos por su valor numérico (2 antes que 10), no por el texto. */
+export function compareProductsByCode(left: Pick<Product, "code" | "stockName" | "id">, right: Pick<Product, "code" | "stockName" | "id">) {
   const codeNumber = (code?: string) => {
     const match = code?.match(/\d+/);
     return match ? Number(match[0]) : Number.POSITIVE_INFINITY;
   };
-  const leftCode = left.zetaCode ?? left.sourceCode;
-  const rightCode = right.zetaCode ?? right.sourceCode;
-  const leftNumber = codeNumber(leftCode);
-  const rightNumber = codeNumber(rightCode);
+  const leftNumber = codeNumber(left.code);
+  const rightNumber = codeNumber(right.code);
   if (leftNumber !== rightNumber) return leftNumber - rightNumber;
 
-  return (leftCode ?? "").localeCompare(rightCode ?? "", "es", { numeric: true, sensitivity: "base" })
+  return (left.code ?? "").localeCompare(right.code ?? "", "es", { numeric: true, sensitivity: "base" })
     || (left.stockName ?? "").localeCompare(right.stockName ?? "", "es", { sensitivity: "base" })
     || left.id.localeCompare(right.id, "es", { sensitivity: "base" });
 }
-
-type ProductSeed = Omit<Product, "requiresTreatment"> & {
-  code: string;
-  name: string;
-  assignment?: string;
-  specification?: string;
-  catalog: ProductCatalog;
-};
 
 export const providers: Provider[] = [
   { id: "blanc", name: "Blanc", type: "Aserradero", supplies: "Pallets y mercadería de terceros" },
@@ -336,93 +319,16 @@ export const providers: Provider[] = [
   { id: "matias", name: "Matías", type: "Transporte", supplies: "Traslado y entrega de pedidos" },
 ];
 
-const productSeeds = [
-  { id: "palbin-p01", code: "P01", name: "Cristal PET", kind: "Pallet", measure: "106 × 119", assignment: "Cristal PET", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p02", code: "P02", name: "Palets Citrus", kind: "Pallet", measure: "120 × 100", assignment: "Citrus", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p03", code: "P03", name: "Molinos San José", kind: "Pallet", measure: "120 × 100", assignment: "Molinos San José", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p04", code: "P04", name: "Saint Gobain", kind: "Pallet", measure: "106 × 106", assignment: "Saint Gobain", catalog: "Palbin" },
-  { id: "palbin-p05", code: "P05", name: "Pallet", kind: "Pallet", measure: "122 × 102", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p09", code: "P09", name: "Pisos exportación", kind: "Piso", assignment: "Exportación", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p10", code: "P10", name: "Fricasa", kind: "Pallet", measure: "120 × 100", assignment: "Fricasa", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p11", code: "P11", name: "Proquimur", kind: "Pallet", measure: "120 × 100", assignment: "Proquimur", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p12", code: "P12", name: "Conaprole", kind: "Pallet", measure: "120 × 100", assignment: "Conaprole", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p13", code: "P13", name: "Pallet", kind: "Pallet", measure: "120 × 80", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p14", code: "P14", name: "Pisos Chacra", kind: "Piso", assignment: "Chacra", catalog: "Palbin" },
-  { id: "palbin-p15", code: "P15", name: "Bins X3 exportación", kind: "Bin", assignment: "Exportación", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p16", code: "P16", name: "Bins X2 exportación", kind: "Bin", assignment: "Exportación", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p17", code: "P17", name: "Bins Chacra azul", kind: "Bin", assignment: "Chacra", catalog: "Palbin" },
-  { id: "palbin-p18", code: "P18", name: "Bins Chacra blanco", kind: "Bin", assignment: "Chacra", catalog: "Palbin" },
-  { id: "palbin-p19", code: "P19", name: "Bins Chacra rojo", kind: "Bin", assignment: "Chacra", catalog: "Palbin" },
-  { id: "palbin-p20", code: "P20", name: "Bins Chacra anaranjado", kind: "Bin", assignment: "Chacra", catalog: "Palbin" },
-  { id: "palbin-p21", code: "P21", name: "AFB", kind: "Pallet", measure: "120 × 100", assignment: "AFB", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p22", code: "P22", name: "AFB", kind: "Pallet", measure: "220 × 117", assignment: "AFB", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p23", code: "P23", name: "Pallet tipo MSJ Mirasol", kind: "Pallet", measure: "120 × 120", assignment: "Mercosur con rebaje en todas las tablas MSJ", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p24", code: "P24", name: "Bins Lio X3", kind: "Bin", assignment: "Lio", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p25", code: "P25", name: "Pallet Citrus", kind: "Pallet", measure: "103 × 121", assignment: "Citrus", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p26", code: "P26", name: "Pallet número 6", kind: "Pallet", measure: "122 × 102", assignment: "Azucitrus", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p27", code: "P27", name: "Pallet Mercosur con corte", kind: "Pallet", measure: "120 × 100", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p28", code: "P28", name: "Pallet Mercosur sin corte", kind: "Pallet", measure: "120 × 100", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p29", code: "P29", name: "Aluminios del Uruguay", kind: "Pallet", measure: "120 × 100", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p30", code: "P30", name: "San Miguel", kind: "Pallet", measure: "113 × 113", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p31", code: "P31", name: "Pallet", kind: "Pallet", measure: "120 × 130", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p32", code: "P32", name: "Pallet", kind: "Pallet", measure: "112 × 120", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p33", code: "P33", name: "San Miguel", kind: "Pallet", measure: "116,5 × 114", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p34", code: "P34", name: "San Miguel", kind: "Pallet", measure: "120 × 120", catalog: "Palbin" },
-  { id: "palbin-p35", code: "P35", name: "San Miguel reforzado", kind: "Pallet", measure: "120 × 120", catalog: "Palbin" },
-  { id: "palbin-p36", code: "P36", name: "Pallet Preinco", kind: "Pallet", measure: "120 × 100", assignment: "Preinco", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p37", code: "P37", name: "Bins Chacra Chapicuy", kind: "Bin", assignment: "Frutos del Chapicuy", catalog: "Palbin" },
-  { id: "palbin-p38", code: "P38", name: "Pallet MSJ", kind: "Pallet", measure: "220 × 120", assignment: "Molinos San José", treatment: "Marcado", catalog: "Palbin" },
-  { id: "palbin-p39", code: "P39", name: "Avanti", kind: "Pallet", measure: "120 × 100", assignment: "Avanti", treatment: "Marcado", catalog: "Palbin" },
-  { id: "pamer-p01", code: "P40", name: "Pallet", kind: "Pallet", measure: "100 × 80", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p02", code: "P41", name: "Pallet", kind: "Pallet", measure: "100 × 100", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p03", code: "P42", name: "Pallet", kind: "Pallet", measure: "100 × 120", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p04", code: "P43", name: "Pallet", kind: "Pallet", measure: "120 × 100", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p05", code: "P44", name: "Pallet", kind: "Pallet", measure: "120 × 80", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p06", code: "P45", name: "Pallet", kind: "Pallet", measure: "120 × 80", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p07", code: "P46", name: "Pallet", kind: "Pallet", measure: "120 × 90", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p08", code: "P47", name: "Pallet", kind: "Pallet", measure: "120 × 100", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p09", code: "P48", name: "Pallet", kind: "Pallet", measure: "120 × 100", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p10", code: "P49", name: "Pallet", kind: "Pallet", measure: "120 × 120", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p11", code: "P50", name: "Pallet", kind: "Pallet", measure: "120 × 120", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p12", code: "P51", name: "Pallet", kind: "Pallet", measure: "130 × 90", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p13", code: "P52", name: "Pallet", kind: "Pallet", measure: "140 × 120", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p14", code: "P53", name: "Pallet", kind: "Pallet", measure: "140 × 120", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p15", code: "P54", name: "Pallet", kind: "Pallet", measure: "145 × 80", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p16", code: "P55", name: "Pallet", kind: "Pallet", measure: "145 × 100", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p17", code: "P56", name: "Pallet", kind: "Pallet", measure: "145 × 100", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p18", code: "P57", name: "Pallet", kind: "Pallet", measure: "155 × 70", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p19", code: "P58", name: "Pallet", kind: "Pallet", measure: "160 × 80", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p20", code: "P59", name: "Pallet", kind: "Pallet", measure: "160 × 110", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p21", code: "P60", name: "Pallet", kind: "Pallet", measure: "216 × 110", treatment: "HT", catalog: "Pamer" },
-  { id: "pamer-p22", code: "P61", name: "Pallet", kind: "Pallet", measure: "130 × 120", catalog: "Pamer" },
-] satisfies ProductSeed[];
-
-function combineTreatment(current?: ProductTreatment, next?: ProductTreatment) {
-  return current || next ? "Marcado" : undefined;
-}
-
-export const products: Product[] = productSeeds.reduce<Product[]>((unique, product) => {
-  const existing = unique.find((item) => item.kind === product.kind && item.measure === product.measure);
-  if (existing) {
-    existing.treatment = combineTreatment(existing.treatment, product.treatment);
-    existing.requiresTreatment = Boolean(existing.treatment);
-    return unique;
-  }
-
-  unique.push({
-    id: product.id,
-    kind: product.kind,
-    measure: product.measure,
-    treatment: combineTreatment(undefined, product.treatment),
-    requiresTreatment: Boolean(product.treatment),
-    stockName: product.name,
-    sourceCatalog: product.catalog,
-    sourceCode: product.code,
-    zetaCode: product.code,
-    stockActive: true,
-  });
-  return unique;
-}, []);
+/** Productos de ejemplo para la tienda en memoria (pruebas y desarrollo). La base real tiene su propio catálogo. */
+export const products: Product[] = [
+  { id: "producto-01", kind: "Pallet", measure: "106 × 119", requiresTreatment: true, stockName: "Cristal PET", code: "1", stockActive: true },
+  { id: "producto-02", kind: "Pallet", measure: "120 × 100", requiresTreatment: true, stockName: "Palets Citrus", code: "2", stockActive: true },
+  { id: "producto-04", kind: "Pallet", measure: "106 × 106", requiresTreatment: false, stockName: "Saint Gobain", code: "4", stockActive: true },
+  { id: "producto-05", kind: "Pallet", measure: "122 × 102", requiresTreatment: true, stockName: "Pallet", code: "5", stockActive: true },
+  { id: "producto-09", kind: "Piso", requiresTreatment: true, stockName: "Pisos exportación", code: "9", stockActive: true },
+  { id: "producto-15", kind: "Bin", requiresTreatment: true, stockName: "Bins X3 exportación", code: "15", stockActive: true },
+  { id: "producto-40", kind: "Pallet", measure: "100 × 80", requiresTreatment: true, stockName: "Pallet", code: "40", stockActive: true },
+];
 
 export const orders: OperationOrder[] = [
   {
@@ -437,11 +343,11 @@ export const orders: OperationOrder[] = [
     dateLabel: "Viernes 14",
     transport: "Linares",
     supply: "Los pallets previstos no llegaron",
-    preparation: "Marcado requerido",
+    preparation: "HT requerido",
     logistics: "Viaje con Linares detenido",
     delivery: "0 de 600 entregados",
     action: "Reprogramar la entrega cuando ingrese la mercadería.",
-    lines: [{ id: "frutura-74-1", product: "Pallet 122 × 102", quantity: 600, preparation: "Marcado" }],
+    lines: [{ id: "frutura-74-1", product: "Pallet 122 × 102", quantity: 600, preparation: "HT" }],
     source: "Plan semanal · fila 74",
   },
   {
@@ -455,7 +361,7 @@ export const orders: OperationOrder[] = [
     stage: "produccion",
     dateLabel: "Martes 11",
     transport: "Linares",
-    supply: "600 en stock Palbin · 300 marcados y 300 sin marcar",
+    supply: "600 en stock · 300 con HT y 300 sin HT",
     preparation: "300 con HT · 300 sin HT",
     logistics: "Linares asignado",
     delivery: "Pedido en coordinación",
@@ -464,7 +370,7 @@ export const orders: OperationOrder[] = [
       { id: "proquimur-63-1", product: "Pallet 120 × 100 Mercosur", quantity: 300, preparation: "Con HT" },
       { id: "proquimur-63-2", product: "Pallet 120 × 100 Mercosur", quantity: 300, preparation: "Sin HT" },
     ],
-    source: "Plan semanal · fila 63 / Stock Palbin · fila 19",
+    source: "Plan semanal · fila 63",
   },
   {
     id: "pamer-184833",

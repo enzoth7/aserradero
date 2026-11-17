@@ -63,10 +63,8 @@ test("distingue proveedores de aserradero y transporte", () => {
 test("conserva una sola fila por medida y tipo", () => {
   const productKeys = products.map((product) => `${product.kind}|${product.measure ?? "sin medida"}`);
   assert.equal(new Set(productKeys).size, products.length);
-  assert.ok(products.some((product) => product.measure === "120 × 100" && product.treatment === "Marcado"));
-  assert.ok(products.every((product) => !product.treatment || product.treatment === "Marcado"));
-  assert.ok(products.every((product) => Object.keys(product).every((field) => ["id", "kind", "measure", "treatment", "requiresTreatment", "stockName", "sourceCatalog", "sourceCode", "zetaCode", "stockActive"].includes(field))));
-  assert.ok(products.every((product) => product.requiresTreatment === Boolean(product.treatment)));
+  assert.ok(products.some((product) => product.measure === "120 × 100" && product.requiresTreatment));
+  assert.ok(products.every((product) => Object.keys(product).every((field) => ["id", "kind", "measure", "requiresTreatment", "stockName", "code", "stockActive"].includes(field))));
 });
 
 test("cada pedido reconcilia pedido, entrega y saldo", () => {
@@ -110,7 +108,7 @@ test("Proquimur separa preparación, stock y transporte", () => {
     [300, "Con HT"],
     [300, "Sin HT"],
   ]);
-  assert.match(order.supply, /300 marcados y 300 sin marcar/i);
+  assert.match(order.supply, /300 con HT y 300 sin HT/i);
   assert.equal(order.transport, "Linares");
   assert.match(order.source, /fila 63/);
 });

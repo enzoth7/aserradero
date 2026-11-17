@@ -1,6 +1,6 @@
 # Direcciones públicas de clientes
 
-Consulta realizada el 6 de noviembre de 2026. Las direcciones siguientes provienen de sitios de las empresas o registros públicos. **Una dirección pública de planta, oficina o empaque no confirma por sí sola el destino pactado para una entrega de Ecoase.** Confirmar ese destino antes de despachar.
+Consulta realizada el 6 de noviembre de 2026. Las direcciones siguientes provienen de sitios de las empresas o registros públicos. **Una dirección pública de planta, oficina o empaque no confirma por sí sola el destino pactado para una entrega.** Confirmar ese destino antes de despachar.
 
 | Cliente | Dirección cargada | Tipo de sede | Fuente |
 | --- | --- | --- | --- |

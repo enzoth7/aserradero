@@ -2,7 +2,7 @@
 
 import { FileCheck2, Image as ImageIcon } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import type { TreatmentControlResult, TreatmentDestination, TreatmentProductOption } from "../treatment";
+import type { TreatmentDestination, TreatmentProductOption } from "../treatment";
 import type { TreatmentResultTarget } from "./TreatmentResults";
 import { AsyncButton, FieldError, ModalShell } from "./ui";
 
@@ -38,7 +38,6 @@ export default function TreatmentEntryModal({ target, onClose, onSaved }: {
   const [quantity, setQuantity] = useState(target ? String(target.planned - target.actual) : "");
   const [performedAt, setPerformedAt] = useState(() => target ? `${target.date <= localDateKey() ? target.date : localDateKey()}T${datetimeLocalValue().slice(11)}` : datetimeLocalValue());
   const [note, setNote] = useState("");
-  const [checks, setChecks] = useState<Record<string, { result: TreatmentControlResult | ""; note: string }>>({});
   const [didTreatment, setDidTreatment] = useState(true);
 
   useEffect(() => {
@@ -59,13 +58,7 @@ export default function TreatmentEntryModal({ target, onClose, onSaved }: {
     ? productOption?.destinations.find((item) => item.orderLineId === plannedEntry.lineId)
     : productOption?.destinations.find((item) => item.key === destinationKey) ?? productOption?.destinations[0];
   const numericQuantity = Number(quantity) || 0;
-  const hasFailure = Object.values(checks).some((check) => check.result === "fail");
 
-  useEffect(() => {
-    const next = Object.fromEntries((destination?.controls ?? []).map((control) => [String(control.id), { result: "" as const, note: "" }]));
-    const timer = window.setTimeout(() => setChecks(next), 0);
-    return () => window.clearTimeout(timer);
-  }, [destination?.key, destination?.controls]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -96,8 +89,7 @@ export default function TreatmentEntryModal({ target, onClose, onSaved }: {
         quantity: numericQuantity,
         performedAt: new Date(`${performedAt}:00-03:00`).toISOString(),
         responsible,
-        note: note.trim() || (destination.key === "general" ? "Stock general" : hasFailure ? "No conforme" : ""),
-        controls: destination.controls.filter((control) => checks[String(control.id)]?.result).map((control) => ({ controlId: control.id, result: checks[String(control.id)]?.result, note: checks[String(control.id)]?.note })),
+        note: note.trim() || (destination.key === "general" ? "Stock general" : ""),
       }) });
       const payload = await response.json() as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "No se pudo registrar el HT.");
@@ -122,7 +114,7 @@ export default function TreatmentEntryModal({ target, onClose, onSaved }: {
       </>}
       <label>Fecha real<input required type="date" value={performedAt.slice(0, 10)} max={localDateKey()} onChange={(event) => setPerformedAt(event.target.value ? `${event.target.value}T${performedAt.slice(11) || "12:00"}` : "")} /></label>
       {didTreatment && <label>{plannedEntry ? "Unidades tratadas" : "Unidades"}<input required min={1} step={1} inputMode="numeric" type="number" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>}
-      {destination && (destination.primaryAsset || destination.controls.length > 0) ? <details className="treatment-entry-controls"><summary><span><strong>Plano y puntos de control</strong><small>{destination.controls.length ? `${destination.controls.length} controles para revisar` : "Referencia visual del producto"}</small></span><FileCheck2 size={18} /></summary><div>{destination.primaryAsset && <div className="treatment-asset"><div><ImageIcon size={18} /><span><strong>Plano o foto principal</strong><small>{destination.primaryAsset.altText}</small></span></div>{destination.primaryAsset.mimeType === "application/pdf" ? <a href={destination.primaryAsset.url} target="_blank" rel="noreferrer">Abrir plano PDF</a> : <img src={destination.primaryAsset.url} alt={destination.primaryAsset.altText} loading="lazy" />}</div>}{destination.controls.length > 0 && <fieldset className="treatment-controls"><legend><FileCheck2 size={17} />Puntos de control</legend>{destination.controls.map((control) => { const check = checks[String(control.id)] ?? { result: "", note: "" }; return <div key={control.id} className={check.result === "fail" ? "failed" : ""}><strong>{control.title}</strong>{control.detail && <small>{control.detail}</small>}<div className="treatment-control-result"><button type="button" className={check.result === "pass" ? "selected pass" : ""} aria-pressed={check.result === "pass"} onClick={() => setChecks((current) => ({ ...current, [String(control.id)]: { ...check, result: "pass" } }))}>Conforme</button><button type="button" className={check.result === "fail" ? "selected fail" : ""} aria-pressed={check.result === "fail"} onClick={() => setChecks((current) => ({ ...current, [String(control.id)]: { ...check, result: "fail" } }))}>No conforme</button></div>{check.result === "fail" && <label>Observación obligatoria<textarea rows={2} value={check.note} onChange={(event) => setChecks((current) => ({ ...current, [String(control.id)]: { ...check, note: event.target.value } }))} /></label>}</div>; })}</fieldset>}</div></details> : null}
+      {destination?.primaryAsset ? <details className="treatment-entry-plan"><summary><span><strong>Plano del producto</strong><small>Referencia visual del producto</small></span><FileCheck2 size={18} /></summary><div><div className="treatment-asset"><div><ImageIcon size={18} /><span><strong>Plano o foto principal</strong><small>{destination.primaryAsset.altText}</small></span></div>{destination.primaryAsset.mimeType === "application/pdf" ? <a href={destination.primaryAsset.url} target="_blank" rel="noreferrer">Abrir plano PDF</a> : <img src={destination.primaryAsset.url} alt={destination.primaryAsset.altText} loading="lazy" />}</div></div></details> : null}
       <label>Observación opcional<textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} /></label>
       {plannedEntry && didTreatment && numericQuantity > 0 && numericQuantity < plannedEntry.planned - plannedEntry.actual && <p className="production-result-balance">Faltarán {number.format(plannedEntry.planned - plannedEntry.actual - numericQuantity)} unidades.</p>}
       {productOption && numericQuantity > productOption.pending && <p className="production-result-balance" role="status">Hay {number.format(Math.max(productOption.pending, 0))} unidades pendientes de HT registradas; falta registrar producción por {number.format(numericQuantity - Math.max(productOption.pending, 0))}. Se guarda igual.</p>}

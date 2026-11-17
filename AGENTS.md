@@ -1,4 +1,4 @@
-# Pautas de Ecoase
+# Pautas del dashboard
 
 Estas reglas se aplican a todas las pantallas del dashboard y deben verificarse también en tamaños de pantalla reducidos.
 

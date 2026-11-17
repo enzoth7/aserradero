@@ -17,7 +17,7 @@ export function scopeStockInventory(rows: StockSummaryRow[], orders: OperationOr
     if (row.inventoryScope) return row;
     const { product } = row;
     const clientNames = product.clientNames ?? [];
-    const pamer = product.sourceCatalog === "Pamer" || (clientNames.length > 0 && clientNames.every(isPamer))
+    const pamer = (clientNames.length > 0 && clientNames.every(isPamer))
       || (!product.clientNames?.length && pamerOrderProducts.has(product.id));
     return { ...row, inventoryScope: pamer ? "pamer" : "general" };
   });

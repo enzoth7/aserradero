@@ -29,7 +29,6 @@ export const routes = [
   { pattern: new RegExp("^/api/client-product-assets/([^/]+)$"), keys: ["id"], load: () => import("../app/api/client-product-assets/[id]/route") },
   { pattern: new RegExp("^/api/client-product-assets/([^/]+)/signed-url$"), keys: ["id"], load: () => import("../app/api/client-product-assets/[id]/signed-url/route") },
   { pattern: new RegExp("^/api/client-products/([^/]+)/assets$"), keys: ["id"], load: () => import("../app/api/client-products/[id]/assets/route") },
-  { pattern: new RegExp("^/api/client-products/([^/]+)/controls$"), keys: ["id"], load: () => import("../app/api/client-products/[id]/controls/route") },
   { pattern: new RegExp("^/api/client-products/([^/]+)$"), keys: ["id"], load: () => import("../app/api/client-products/[id]/route") },
   { pattern: new RegExp("^/api/clients/([^/]+)/products$"), keys: ["clientId"], load: () => import("../app/api/clients/[clientId]/products/route") },
   { pattern: new RegExp("^/api/clients/([^/]+)$"), keys: ["clientId"], load: () => import("../app/api/clients/[clientId]/route") },

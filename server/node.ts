@@ -33,4 +33,4 @@ createServer(async (incoming, outgoing) => {
     if (!outgoing.headersSent) outgoing.writeHead(500);
     outgoing.end("Error interno.");
   }
-}).listen(port, "127.0.0.1", () => console.log(`Ecoase ${serveDist ? "app" : "API"} en http://127.0.0.1:${port}`));
+}).listen(port, "127.0.0.1", () => console.log(`${serveDist ? "App" : "API"} en http://127.0.0.1:${port}`));

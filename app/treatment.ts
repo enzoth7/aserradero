@@ -1,9 +1,8 @@
 import type { Product } from "./data.ts";
 
 export type StockState = "pending_treatment" | "ready";
-export type StockMovementType = "opening_balance" | "internal_production" | "supplier_receipt" | "production_receipt" | "treatment_out" | "treatment_in" | "treatment_reversal_out" | "treatment_reversal_in" | "dispatch" | "return" | "waste" | "adjustment" | "reversal";
-export type TreatmentBatchStatus = "posted" | "rejected" | "reversal";
-export type TreatmentControlResult = "pass" | "fail";
+export type StockMovementType = "internal_production" | "supplier_receipt" | "production_receipt" | "treatment_out" | "treatment_in" | "treatment_reversal_out" | "treatment_reversal_in" | "dispatch" | "return" | "waste" | "adjustment" | "reversal";
+export type TreatmentBatchStatus = "posted" | "reversal";
 
 export interface StockMovement {
   id: number | string;
@@ -27,15 +26,6 @@ export interface StockMovement {
   createdAt: string;
 }
 
-export interface TreatmentControlCheck {
-  id: number | string;
-  batchId: number | string;
-  controlId: number | string;
-  title: string;
-  result: TreatmentControlResult;
-  note?: string;
-}
-
 export interface TreatmentBatch {
   id: number | string;
   productId: string;
@@ -52,7 +42,6 @@ export interface TreatmentBatch {
   reversalOfBatchId?: number | string;
   reversedByBatchId?: number | string;
   createdAt: string;
-  checks: TreatmentControlCheck[];
   movements: StockMovement[];
   primaryAsset?: { id: number | string; url: string; mimeType: string; altText: string };
 }
@@ -64,7 +53,6 @@ export interface TreatmentDestination {
   orderLineId?: string;
   clientName?: string;
   orderReference?: string;
-  controls: Array<{ id: number | string; title: string; detail?: string }>;
   primaryAsset?: { id: number | string; url: string; mimeType: string; altText: string };
 }
 
@@ -79,7 +67,6 @@ export interface TreatmentProductOption {
 export interface TreatmentDaySummary {
   date: string;
   processed: number;
-  rejected: number;
   reversed: number;
   pending: number;
   ready: number;
@@ -112,7 +99,6 @@ export interface CreateTreatmentBatchInput {
   performedAt: string;
   responsible: string;
   note?: string;
-  controls: Array<{ controlId: number | string; result: TreatmentControlResult; note?: string }>;
 }
 
 export function productTreatmentLabel(product: Pick<Product, "kind" | "measure" | "stockName">) {
@@ -135,7 +121,6 @@ export function summarizeTreatmentDay(date: string, batches: TreatmentBatch[], b
   return {
     date,
     processed: sameDay.filter((batch) => batch.status === "posted").reduce((sum, batch) => sum + batch.quantity, 0),
-    rejected: sameDay.filter((batch) => batch.status === "rejected").reduce((sum, batch) => sum + batch.quantity, 0),
     reversed: sameDay.filter((batch) => batch.status === "reversal").reduce((sum, batch) => sum + batch.quantity, 0),
     pending: [...balances.values()].reduce((sum, balance) => sum + balance.pending, 0),
     ready: [...balances.values()].reduce((sum, balance) => sum + balance.ready, 0),

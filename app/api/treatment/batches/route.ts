@@ -1,14 +1,9 @@
 import { recordTreatmentBatch } from "../../store";
-import type { CreateTreatmentBatchInput, TreatmentControlResult } from "../../../treatment";
+import type { CreateTreatmentBatchInput } from "../../../treatment";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json() as Record<string, unknown>;
-    const controls = Array.isArray(body.controls) ? body.controls.map((item) => item as Record<string, unknown>).map((item) => ({
-      controlId: typeof item.controlId === "string" || typeof item.controlId === "number" ? item.controlId : "",
-      result: item.result as TreatmentControlResult,
-      note: typeof item.note === "string" ? item.note : undefined,
-    })) : [];
     const input: CreateTreatmentBatchInput = {
       productId: typeof body.productId === "string" ? body.productId : "",
       clientProductId: typeof body.clientProductId === "string" || typeof body.clientProductId === "number" ? body.clientProductId : undefined,
@@ -17,10 +12,9 @@ export async function POST(request: Request) {
       performedAt: typeof body.performedAt === "string" ? body.performedAt : "",
       responsible: typeof body.responsible === "string" ? body.responsible : "",
       note: typeof body.note === "string" ? body.note : undefined,
-      controls,
     };
-    if (!input.productId || !Number.isInteger(input.quantity) || input.quantity <= 0 || !input.responsible.trim() || Number.isNaN(Date.parse(input.performedAt)) || controls.some((control) => !control.controlId || !["pass", "fail"].includes(control.result))) {
-      return Response.json({ error: "Revise producto, cantidad, momento, responsable y controles." }, { status: 400 });
+    if (!input.productId || !Number.isInteger(input.quantity) || input.quantity <= 0 || !input.responsible.trim() || Number.isNaN(Date.parse(input.performedAt))) {
+      return Response.json({ error: "Revise producto, cantidad, momento y responsable." }, { status: 400 });
     }
     return Response.json({ result: await recordTreatmentBatch(input) }, { status: 201 });
   } catch (error) {

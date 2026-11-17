@@ -9,7 +9,7 @@ import { movementStateLabel, orderStockReservations, scopeStockInventory, stockQ
 
 const number = new Intl.NumberFormat("es-UY", { maximumFractionDigits: 1 });
 const dateTime = new Intl.DateTimeFormat("es-UY", { dateStyle: "short", timeStyle: "short", timeZone: "America/Montevideo" });
-const movementCopy: Record<string, string> = { opening_balance: "Saldo inicial", internal_production: "Producción interna", supplier_receipt: "Recepción de proveedor", production_receipt: "Producción confirmada", treatment_out: "Sale a HT", treatment_in: "HT realizado", treatment_reversal_out: "Reversión de HT", treatment_reversal_in: "Retorno por reversión", dispatch: "Despacho", return: "Devolución", waste: "Merma", adjustment: "Ajuste", reversal: "Reversión" };
+const movementCopy: Record<string, string> = { internal_production: "Producción interna", supplier_receipt: "Recepción de proveedor", production_receipt: "Producción confirmada", treatment_out: "Sale a HT", treatment_in: "HT realizado", treatment_reversal_out: "Reversión de HT", treatment_reversal_in: "Retorno por reversión", dispatch: "Despacho", return: "Devolución", waste: "Merma", adjustment: "Ajuste", reversal: "Reversión" };
 
 function localDateTimeValue() {
   const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Montevideo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
@@ -100,7 +100,7 @@ function StockDetailModal({ row, onClose, onChanged }: { row: StockSummaryRow; o
     onChanged();
   };
   return (
-    <ModalShell title={productName(row)} description={`${row.product.sourceCatalog ?? "Catálogo"}, ${row.product.sourceCode ?? row.product.id}`} onClose={onClose} className="stock-detail-modal">
+    <ModalShell title={productName(row)} description={`Código ${row.product.code ?? "—"}`} onClose={onClose} className="stock-detail-modal">
       {error && <p className="field-error" role="alert">{error}</p>}
       {!detail ? <LoadingState label="Cargando detalle de stock" rows={6} /> : <>
         <section className="stock-detail-balance" aria-label="Saldos del producto">
@@ -177,7 +177,7 @@ function StockInventory({ title, rows, providers, loading, error, onChanged, foc
   const destinationRow = rows.find((row) => row.product.id === destination?.productId);
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("es");
-    return rows.filter((row) => (!summaryFilter || row[summaryFilter] > 0) && (!normalized || [productName(row), row.product.measure, row.product.zetaCode, row.product.sourceCode].some((value) => value?.toLocaleLowerCase("es").includes(normalized))))
+    return rows.filter((row) => (!summaryFilter || row[summaryFilter] > 0) && (!normalized || [productName(row), row.product.measure, row.product.code].some((value) => value?.toLocaleLowerCase("es").includes(normalized))))
       .sort((a, b) => productName(a).localeCompare(productName(b), "es"));
   }, [query, rows, summaryFilter]);
   const changed = () => { setEntry(false); void onChanged(); };
@@ -203,7 +203,7 @@ function StockInventory({ title, rows, providers, loading, error, onChanged, foc
           <thead><tr><th>Artículo</th><th>Código</th><th>Medida</th><th>Pendiente de HT</th><th>Listo</th><th>Reservado</th><th>Disponible</th><th scope="col">Acciones</th></tr></thead>
           <tbody>{visible.map((row) => <tr key={row.product.id}>
             <td><button type="button" onClick={() => setSelectedId(row.product.id)}><strong>{productName(row)}</strong></button></td>
-            <td>{row.product.zetaCode ?? row.product.sourceCode ?? "—"}</td>
+            <td>{row.product.code ?? "—"}</td>
             <td>{row.product.measure ?? "Sin medida"}</td>
             {stockKpis.map(({ field, label }) => <td key={field} className={row[field] > 0 ? "stock-quantity has-stock" : "stock-quantity"}>
               <button type="button" className="stock-quantity-link" aria-label={`${label}: ${number.format(row[field])} unidades de ${productName(row)}. Ver destino`} onClick={() => setDestination({ productId: row.product.id, field, label })}>{number.format(row[field])}</button>

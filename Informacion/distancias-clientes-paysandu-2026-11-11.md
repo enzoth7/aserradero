@@ -21,4 +21,4 @@ Las direcciones son referencias públicas del cliente, no destinos de entrega co
 | Proquimur | 336,3 | 4,28 | Juanicó, aproximado |
 | Saint Gobain | 369,7 | 4,96 | Barros Blancos, aproximado |
 
-Las tres referencias aproximadas de Salto comparten punto y recorrido hasta la localidad. Los valores se guardaron en `logistics_client_delivery_limits` y los puntos en `logistics_locations` del proyecto Supabase Ecoase.
+Las tres referencias aproximadas de Salto comparten punto y recorrido hasta la localidad. Los valores se guardaron en `logistics_client_delivery_limits` y los puntos en `logistics_locations` del proyecto de Supabase.

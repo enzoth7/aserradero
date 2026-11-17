@@ -16,11 +16,11 @@ async function request(path = "/", init = {}) {
   return fetch(`${baseUrl}${path}`, { ...init, redirect: "manual" });
 }
 
-async function createMasterFixture({ name, address, zetaCode, productId = "palbin-p02" }) {
+async function createMasterFixture({ name, address, productId = "producto-02" }) {
   const clientResponse = await request("/api/clients", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, address, department: "Canelones" }) });
   assert.equal(clientResponse.status, 201);
   const client = (await clientResponse.json()).client;
-  const relationResponse = await request(`/api/clients/${client.id}/products`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId, zetaCode, operationalName: "Pallet operativo", initialControl: "Revisar clavado y separación" }) });
+  const relationResponse = await request(`/api/clients/${client.id}/products`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId, operationalName: "Pallet operativo" }) });
   assert.equal(relationResponse.status, 201);
   let relation = (await relationResponse.json()).product;
   const form = new FormData();
@@ -38,7 +38,7 @@ async function createMasterFixture({ name, address, zetaCode, productId = "palbi
 before(async () => {
   server = spawn(process.execPath, ["--import", "tsx", "server/node.ts", "--serve-dist"], {
     cwd: projectRoot,
-    env: { ...process.env, ECOASE_DATA_BACKEND: "memory", PORT: String(port) },
+    env: { ...process.env, DATA_BACKEND: "memory", PORT: String(port) },
     stdio: ["ignore", "pipe", "pipe"],
   });
   server.stdout.on("data", (chunk) => { serverOutput += chunk.toString(); });
@@ -54,7 +54,7 @@ before(async () => {
     await pause(100);
   }
 
-  throw new Error(`No se pudo iniciar Ecoase para las pruebas.\n${serverOutput}`);
+  throw new Error(`No se pudo iniciar el servidor para las pruebas.\n${serverOutput}`);
 });
 
 after(async () => {
@@ -76,8 +76,8 @@ test("sirve la aplicación React en todas las rutas directas", async () => {
 });
 
 test("aplica la base de pallets a cada cliente sin compartir sus cambios", async () => {
-  const first = await createMasterFixture({ name: `Base A ${Date.now()}`, address: "Ruta 5", zetaCode: "BASE-A" });
-  const second = await createMasterFixture({ name: `Base B ${Date.now()}`, address: "Ruta 8", zetaCode: "BASE-B" });
+  const first = await createMasterFixture({ name: `Base A ${Date.now()}`, address: "Ruta 5" });
+  const second = await createMasterFixture({ name: `Base B ${Date.now()}`, address: "Ruta 8" });
   const snapshot = (await (await request("/api/capacity?from=2026-11-05&to=2026-11-05")).json()).capacity;
   const expected = [
     ["blanc", 250, 350],
@@ -108,10 +108,10 @@ test("asigna reglas de fábrica por modelo de pallet", async () => {
     { model: "Citrus", expected: [["fabrica_john", 450, 550]] },
   ].entries()) {
     const code = String(800000000 + (Date.now() % 100000000) + index);
-    const response = await request("/api/products", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "Pallet", measure: `${123 + index} x 99`, attributes: { modelo: model }, zetaCode: code }) });
+    const response = await request("/api/products", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "Pallet", measure: `${123 + index} x 99`, attributes: { modelo: model }, code: code }) });
     assert.equal(response.status, 201);
     const { product } = await response.json();
-    const { relation, client } = await createMasterFixture({ name: `${model} ${Date.now()}`, zetaCode: code, productId: product.id });
+    const { relation, client } = await createMasterFixture({ name: `${model} ${Date.now()}`, productId: product.id });
     const options = await (await request(`/api/clients/${client.id}/products`)).json();
     assert.equal(options.products[0].kind, "Pallet");
     const snapshot = (await (await request("/api/capacity?from=2026-11-05&to=2026-11-05")).json()).capacity;
@@ -128,11 +128,11 @@ test("asigna reglas de fábrica por modelo de pallet", async () => {
 
 test("administra capacidad por recurso y producto con confirmación trazable", async () => {
   const transport = await request("/api/capacity/transport", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ source: "internal", palletCapacity: 25, status: "confirmed" }) });
-  const transportAdjustment = await request("/api/capacity/adjustments", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ date: "2026-09-08", resourceType: "transport", source: "internal", palletAdjustment: 10, responsible: "Flota Ecoase" }) });
+  const transportAdjustment = await request("/api/capacity/adjustments", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ date: "2026-09-08", resourceType: "transport", source: "internal", palletAdjustment: 10, responsible: "Flota propia" }) });
   assert.equal(transport.status, 200);
   assert.equal(transportAdjustment.status, 200);
 
-  const capacityMaster = await createMasterFixture({ name: "Capacidad prueba", address: "Ruta 5 km 18", zetaCode: "CAP-01" });
+  const capacityMaster = await createMasterFixture({ name: "Capacidad prueba", address: "Ruta 5 km 18" });
   const created = await request("/api/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
     clientProductId: capacityMaster.relation.id, requested: 40, orderDate: "2026-09-01", requestedDeliveryDate: "2026-09-08", plannedDate: "2026-09-08", stage: "produccion",
     productionSource: "internal", productionDate: "2026-09-07", requiredOperations: ["assembly"], transportSource: "internal",
@@ -150,7 +150,7 @@ test("administra capacidad por recurso y producto con confirmación trazable", a
   const allocation = createdOrder.lines[0].productionAllocations[0];
   assert.equal(allocation.status, "draft");
 
-  const ruleBody = { resourceId: "internal", productId: "palbin-p02", clientProductId: capacityMaster.relation.id, peopleCount: 2, configurationLabel: "Fábrica ×2", normalUnitsPerDay: 30, maximumUnitsPerDay: 50, validFrom: "2026-09-01", source: "prueba" };
+  const ruleBody = { resourceId: "internal", productId: "producto-02", clientProductId: capacityMaster.relation.id, peopleCount: 2, configurationLabel: "Fábrica ×2", normalUnitsPerDay: 30, maximumUnitsPerDay: 50, validFrom: "2026-09-01", source: "prueba" };
   const ruleResponse = await request("/api/capacity/rules", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(ruleBody) });
   assert.equal(ruleResponse.status, 201);
   const rule = (await ruleResponse.json()).rule;
@@ -181,7 +181,7 @@ test("administra capacidad por recurso y producto con confirmación trazable", a
   const referencedDelete = await request(`/api/capacity/rules?id=${rule.id}`, { method: "DELETE" });
   assert.equal(referencedDelete.status, 409);
 
-  const disposableRuleResponse = await request("/api/capacity/rules", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ resourceId: "mirasol", productId: "palbin-p02", clientProductId: capacityMaster.relation.id, configurationLabel: "Regla descartable", normalUnitsPerDay: 20, maximumUnitsPerDay: 30, validFrom: "2030-01-01", source: "prueba" }) });
+  const disposableRuleResponse = await request("/api/capacity/rules", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ resourceId: "mirasol", productId: "producto-02", clientProductId: capacityMaster.relation.id, configurationLabel: "Regla descartable", normalUnitsPerDay: 20, maximumUnitsPerDay: 30, validFrom: "2030-01-01", source: "prueba" }) });
   assert.equal(disposableRuleResponse.status, 201);
   const disposableRule = (await disposableRuleResponse.json()).rule;
   const disposableDelete = await request(`/api/capacity/rules?id=${disposableRule.id}`, { method: "DELETE" });
@@ -212,12 +212,12 @@ test("registra, consulta y revierte tratamiento sin alterar el stock físico", a
   const optionsResponse = await request("/api/treatment/options");
   assert.equal(optionsResponse.status, 200);
   const options = (await optionsResponse.json()).options;
-  const product = options.find((item) => item.product.id === "palbin-p02");
+  const product = options.find((item) => item.product.id === "producto-02");
   assert.ok(product);
   assert.equal(product.pending, 35);
   assert.equal(product.ready, 0);
 
-  const postedResponse = await request("/api/treatment/batches", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: product.product.id, quantity: 10, performedAt: "2026-09-07T14:00:00.000Z", responsible: "Operador QA", note: "Lote general de prueba", controls: [] }) });
+  const postedResponse = await request("/api/treatment/batches", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: product.product.id, quantity: 10, performedAt: "2026-09-07T14:00:00.000Z", responsible: "Operador QA", note: "Lote general de prueba" }) });
   assert.equal(postedResponse.status, 201);
   const posted = (await postedResponse.json()).result;
   assert.equal(posted.status, "posted");
@@ -232,7 +232,7 @@ test("registra, consulta y revierte tratamiento sin alterar el stock físico", a
   assert.equal(batch.movements.length, 2);
   assert.equal(batch.movements.reduce((sum, movement) => sum + movement.quantity, 0), 0);
 
-  const insufficient = await request("/api/treatment/batches", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: product.product.id, quantity: 30, performedAt: "2026-09-07T15:00:00.000Z", responsible: "Operador QA", note: "No debe alcanzar", controls: [] }) });
+  const insufficient = await request("/api/treatment/batches", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: product.product.id, quantity: 30, performedAt: "2026-09-07T15:00:00.000Z", responsible: "Operador QA", note: "No debe alcanzar" }) });
   // Si el stock pendiente no alcanza, el HT se registra igual y el saldo queda negativo como advertencia.
   assert.equal(insufficient.status, 201);
   const shortage = (await insufficient.json()).result;
@@ -258,21 +258,21 @@ test("registra, consulta y revierte tratamiento sin alterar el stock físico", a
 });
 
 test("registra entradas, ajustes y reversiones en stock", async () => {
-  const initial = (await (await request("/api/stock/summary")).json()).stock.find((row) => row.product.id === "palbin-p02");
-  const receipt = await request("/api/stock/movements/receipts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: "palbin-p02", stockState: "ready", quantity: 20, movementType: "supplier_receipt", providerId: "mirasol", occurredAt: "2026-09-08T12:00:00.000Z", responsible: "Recepción QA", sourceReference: "REM-QA" }) });
+  const initial = (await (await request("/api/stock/summary")).json()).stock.find((row) => row.product.id === "producto-02");
+  const receipt = await request("/api/stock/movements/receipts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: "producto-02", stockState: "ready", quantity: 20, movementType: "supplier_receipt", providerId: "mirasol", occurredAt: "2026-09-08T12:00:00.000Z", responsible: "Recepción QA", sourceReference: "REM-QA" }) });
   assert.equal(receipt.status, 201);
   const receiptId = (await receipt.json()).movementId;
-  let current = (await (await request("/api/stock/summary")).json()).stock.find((row) => row.product.id === "palbin-p02");
+  let current = (await (await request("/api/stock/summary")).json()).stock.find((row) => row.product.id === "producto-02");
   assert.equal(current.ready, initial.ready + 20);
 
-  const adjustment = await request("/api/stock/movements/adjustments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: "palbin-p02", stockState: "ready", quantityDelta: 5, occurredAt: "2026-09-08T13:00:00.000Z", responsible: "Inventario QA", reason: "Conteo físico" }) });
+  const adjustment = await request("/api/stock/movements/adjustments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: "producto-02", stockState: "ready", quantityDelta: 5, occurredAt: "2026-09-08T13:00:00.000Z", responsible: "Inventario QA", reason: "Conteo físico" }) });
   assert.equal(adjustment.status, 201);
-  current = (await (await request("/api/stock/summary")).json()).stock.find((row) => row.product.id === "palbin-p02");
+  current = (await (await request("/api/stock/summary")).json()).stock.find((row) => row.product.id === "producto-02");
   assert.equal(current.ready, initial.ready + 25);
 
   const reversed = await request(`/api/stock/movements/${receiptId}/reverse`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ occurredAt: "2026-09-08T14:00:00.000Z", responsible: "Encargado QA", reason: "Remito anulado" }) });
   assert.equal(reversed.status, 201);
-  current = (await (await request("/api/stock/summary")).json()).stock.find((row) => row.product.id === "palbin-p02");
+  current = (await (await request("/api/stock/summary")).json()).stock.find((row) => row.product.id === "producto-02");
   assert.equal(current.ready, initial.ready + 5);
 
   const duplicate = await request(`/api/stock/movements/${receiptId}/reverse`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ occurredAt: "2026-09-08T15:00:00.000Z", responsible: "Encargado QA", reason: "No duplicar" }) });
@@ -306,14 +306,14 @@ test("muestra el catálogo de productos en columnas separadas", async () => {
   const productsResponse = await request("/api/products");
   assert.equal(productsResponse.status, 200);
   const apiProducts = (await productsResponse.json()).products;
-  const internalCodeNumbers = apiProducts.map((product) => Number(product.sourceCode?.match(/\d+/)?.[0] ?? Number.POSITIVE_INFINITY));
+  const internalCodeNumbers = apiProducts.map((product) => Number(product.code?.match(/\d+/)?.[0] ?? Number.POSITIVE_INFINITY));
   assert.deepEqual(internalCodeNumbers, [...internalCodeNumbers].sort((left, right) => left - right));
-  const sourceCodes = apiProducts.map((product) => product.sourceCode?.trim().toLocaleUpperCase("es")).filter(Boolean);
-  assert.equal(new Set(sourceCodes).size, sourceCodes.length);
+  const codes = apiProducts.map((product) => product.code?.trim().toLocaleUpperCase("es")).filter(Boolean);
+  assert.equal(new Set(codes).size, codes.length);
   const measureKeys = apiProducts.map((product) => `${product.kind}|${product.measure ?? "sin medida"}`);
   assert.equal(new Set(measureKeys).size, measureKeys.length);
   assert.ok(apiProducts.every((product) => Array.isArray(product.clientNames)));
-  assert.ok(apiProducts.every((product) => Object.keys(product).every((field) => ["id", "kind", "measure", "treatment", "requiresTreatment", "stockName", "sourceCatalog", "sourceCode", "zetaCode", "stockActive", "clientNames", "attributes"].includes(field))));
+  assert.ok(apiProducts.every((product) => Object.keys(product).every((field) => ["id", "kind", "measure", "heightCm", "requiresTreatment", "stockName", "code", "stockActive", "clientNames", "attributes"].includes(field))));
 });
 
 test("muestra proveedores por tipo y abastecimiento", async () => {
@@ -426,7 +426,7 @@ test("crea pedidos mediante POST /api/orders", async () => {
   });
   assert.equal(invalidTransport.status, 400);
 
-  const master = await createMasterFixture({ name: "Cliente prueba", address: "Ruta 5 km 18", zetaCode: "Z-08" });
+  const master = await createMasterFixture({ name: "Cliente prueba", address: "Ruta 5 km 18" });
 
   const response = await request("/api/orders", {
     method: "POST",
@@ -442,7 +442,6 @@ test("crea pedidos mediante POST /api/orders", async () => {
       stage: "reorganizando",
       transport: "Matías",
       reference: "OC-4321",
-      zetaCode: "Z-08",
       deliveryAddress: "Ruta 5 km 18",
       notes: "Descargar por el acceso norte.",
       productionSource: "internal",
@@ -461,26 +460,25 @@ test("crea pedidos mediante POST /api/orders", async () => {
   assert.equal(payload.order.orderDate, "2026-08-01");
   assert.equal(payload.order.requestedDeliveryDate, "2026-08-10");
   assert.equal(payload.order.stage, "negociacion");
-  assert.equal(payload.order.zetaCode, "P02");
   assert.equal(payload.order.deliveryAddress, "Ruta 5 km 18");
   assert.equal(payload.order.notes, "Descargar por el acceso norte.");
 });
 
 test("gestiona el maestro cliente-producto, filtra opciones y protege los datos automáticos", async () => {
-  const first = await createMasterFixture({ name: "Maestro Uno", address: "Camino Uno 123", zetaCode: "MASTER-1", productId: "palbin-p01" });
-  const second = await createMasterFixture({ name: "Maestro Dos", address: "Camino Dos 456", zetaCode: "MASTER-2", productId: "palbin-p04" });
+  const first = await createMasterFixture({ name: "Maestro Uno", address: "Camino Uno 123", productId: "producto-01" });
+  const second = await createMasterFixture({ name: "Maestro Dos", address: "Camino Dos 456", productId: "producto-04" });
   const clientPage = await request(`/clientes/${first.client.id}`);
   assert.equal(clientPage.status, 200);
   const options = (await (await request(`/api/clients/${first.client.id}/products?active=true`)).json()).products;
   assert.equal(options.length, 1);
   assert.equal(options[0].id, first.relation.id);
-  assert.equal(options[0].zetaCode, "P01");
+  assert.equal(options[0].code, "1");
   assert.equal(options[0].clientAddress, "Camino Uno 123");
   assert.ok(!options.some((option) => option.id === second.relation.id));
 
-  const additionalProduct = await request(`/api/clients/${first.client.id}/products`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: "palbin-p04", zetaCode: "MASTER-1", initialControl: "Control adicional" }) });
+  const additionalProduct = await request(`/api/clients/${first.client.id}/products`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: "producto-04" }) });
   assert.equal(additionalProduct.status, 201);
-  assert.equal((await additionalProduct.json()).product.zetaCode, "P04");
+  assert.equal((await additionalProduct.json()).product.code, "4");
 
   const invalidFile = new FormData();
   invalidFile.set("file", new File(["no válido"], "plano.txt", { type: "text/plain" }));
@@ -512,12 +510,11 @@ test("permite crear pedidos sin dirección, controles ni foto", async () => {
   const relationResponse = await request(`/api/clients/${client.id}/products`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ productId: "palbin-p02", operationalName: "Pallet sin referencias" }),
+    body: JSON.stringify({ productId: "producto-02", operationalName: "Pallet sin referencias" }),
   });
   assert.equal(relationResponse.status, 201);
   const relation = (await relationResponse.json()).product;
   assert.equal(relation.active, true);
-  assert.deepEqual(relation.controls, []);
   assert.deepEqual(relation.assets, []);
 
   const options = (await (await request(`/api/clients/${client.id}/products?active=true`)).json()).products;
@@ -551,7 +548,7 @@ test("cancela un pedido a historial y elimina otro por completo", async () => {
   const clientResponse = await request("/api/clients", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Cliente para borrar" }) });
   assert.equal(clientResponse.status, 201);
   const client = (await clientResponse.json()).client;
-  const relationResponse = await request(`/api/clients/${client.id}/products`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: "palbin-p02", operationalName: "Pallet de prueba" }) });
+  const relationResponse = await request(`/api/clients/${client.id}/products`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ productId: "producto-02", operationalName: "Pallet de prueba" }) });
   assert.equal(relationResponse.status, 201);
   const relation = (await relationResponse.json()).product;
   const createOrder = async (quantity) => {
@@ -583,7 +580,7 @@ test("agrega productos y clientes mediante sus endpoints", async () => {
   const productResponse = await request("/api/products", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ kind: "Pallet", measure: "123 × 99", requiresTreatment: true, zetaCode: "1001" }),
+    body: JSON.stringify({ kind: "Pallet", measure: "123 × 99", requiresTreatment: true, code: "1001" }),
   });
   assert.equal(productResponse.status, 201);
   assert.deepEqual((await productResponse.json()).product.kind, "Pallet");
@@ -605,7 +602,7 @@ test("agrega productos y clientes mediante sus endpoints", async () => {
 
 test("identifica productos por niveles y rechaza repetidos", async () => {
   const post = (body) => request("/api/products", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const full = { kind: "Pallet", measure: "120 x 100", attributes: { modelo: "Mercosur", refuerzo: "Liviano", identificacion: "N° 1", tratamiento: "Con HT" }, zetaCode: "1002" };
+  const full = { kind: "Pallet", measure: "120 x 100", attributes: { modelo: "Mercosur", refuerzo: "Liviano", identificacion: "N° 1", tratamiento: "Con HT" }, code: "1002" };
   const created = await post(full);
   assert.equal(created.status, 201);
   const product = (await created.json()).product;
@@ -614,23 +611,23 @@ test("identifica productos por niveles y rechaza repetidos", async () => {
   assert.equal(product.stockName, "Pallet · 120 x 100 · Mercosur · Liviano · N° 1 · Con HT");
 
   // El tratamiento respeta el valor explícito de la planilla y no se infiere de otro nivel.
-  const untreated = await post({ ...full, attributes: { ...full.attributes, identificacion: undefined, tratamiento: "Sin HT" }, zetaCode: "1003" });
+  const untreated = await post({ ...full, attributes: { ...full.attributes, identificacion: undefined, tratamiento: "Sin HT" }, code: "1003" });
   assert.equal(untreated.status, 201);
   const untreatedProduct = (await untreated.json()).product;
   assert.equal(untreatedProduct.attributes.tratamiento, "Sin HT");
   assert.equal(untreatedProduct.requiresTreatment, false);
 
   // Misma identidad con la medida escrita distinto y otro código: es el mismo producto.
-  const repeated = await post({ ...full, measure: "120×100", zetaCode: "1004" });
+  const repeated = await post({ ...full, measure: "120×100", code: "1004" });
   assert.equal(repeated.status, 400);
   assert.match((await repeated.json()).error, /esa clasificación/);
 
   // 100 x 120 es otra medida (en Pamer cambia el sentido de las tablas).
-  const turned = await post({ ...full, measure: "100 x 120", zetaCode: "1005" });
+  const turned = await post({ ...full, measure: "100 x 120", code: "1005" });
   assert.equal(turned.status, 201);
 
   // Cambiar un solo nivel lo vuelve un producto distinto, y la nomenclatura del cliente se guarda tal cual.
-  const variant = await post({ ...full, attributes: { ...full.attributes, identificacion: "Punto Azul", taco: "Taco especial" }, zetaCode: "1006" });
+  const variant = await post({ ...full, attributes: { ...full.attributes, identificacion: "Punto Azul", taco: "Taco especial" }, code: "1006" });
   assert.equal(variant.status, 201);
   const variantProduct = (await variant.json()).product;
   assert.equal(variantProduct.attributes.taco, "Taco especial");
@@ -639,18 +636,18 @@ test("identifica productos por niveles y rechaza repetidos", async () => {
   const logoLevel = levels.find((level) => level.id === "logo-propio");
   assert.deepEqual(logoLevel.options, ["A", "Crufi", "MSJ"]);
   assert.equal(levels.findIndex((level) => level.id === "logo-propio"), levels.findIndex((level) => level.id === "tratamiento") + 1);
-  const withLogo = await post({ ...full, attributes: { ...full.attributes, "logo-propio": "Crufi" }, zetaCode: "1009" });
+  const withLogo = await post({ ...full, attributes: { ...full.attributes, "logo-propio": "Crufi" }, code: "1009" });
   assert.equal(withLogo.status, 201);
   const logoProduct = (await withLogo.json()).product;
   assert.equal(logoProduct.attributes["logo-propio"], "Crufi");
   assert.match(logoProduct.stockName, /Crufi$/);
 
   // El tratamiento puede quedar vacío; los niveles inexistentes siguen rechazándose.
-  const withoutTreatment = await post({ kind: "Pallet", measure: "120 x 100", zetaCode: "1007" });
+  const withoutTreatment = await post({ kind: "Pallet", measure: "120 x 100", code: "1007" });
   assert.equal(withoutTreatment.status, 201);
   const withoutTreatmentProduct = (await withoutTreatment.json()).product;
   assert.equal(withoutTreatmentProduct.attributes.tratamiento, undefined);
-  const unknown = await post({ kind: "Pallet", measure: "120 x 100", attributes: { inexistente: "x", tratamiento: "Sin HT" }, zetaCode: "1008" });
+  const unknown = await post({ kind: "Pallet", measure: "120 x 100", attributes: { inexistente: "x", tratamiento: "Sin HT" }, code: "1008" });
   assert.equal(unknown.status, 400);
   assert.match((await unknown.json()).error, /no existe/);
 
@@ -678,7 +675,7 @@ test("arma, reordena y protege los niveles de producto", async () => {
     assert.equal(added.system, false);
 
     // Se puede usar en un producto y entonces ya no se puede eliminar.
-    const product = await request("/api/products", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "Pallet", measure: "99 x 99", attributes: { pintura: "Verde", tratamiento: "Sin HT" }, zetaCode: "1101" }) });
+    const product = await request("/api/products", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "Pallet", measure: "99 x 99", attributes: { pintura: "Verde", tratamiento: "Sin HT" }, code: "1101" }) });
     assert.equal(product.status, 201);
     const productId = (await product.json()).product.id;
     const usage = (await (await request("/api/product-levels")).json()).usage;
@@ -714,24 +711,23 @@ test("edita, asigna cliente y elimina productos mediante endpoints separados", a
   const clients = (await (await request("/api/clients")).json()).clients;
   const pamer = clients.find((client) => client.name === "Pamer");
   assert.ok(pamer?.id);
-  const editResponse = await request("/api/products/palbin-p05", {
+  const editResponse = await request("/api/products/producto-05", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ kind: "Pallet", measure: "122 × 102", stockName: "Pallet especial", zetaCode: "1201", requiresTreatment: true, clientId: pamer.id }),
+    body: JSON.stringify({ kind: "Pallet", measure: "122 × 102", stockName: "Pallet especial", code: "1201", requiresTreatment: true, clientId: pamer.id }),
   });
   assert.equal(editResponse.status, 200);
   const edited = await editResponse.json();
   assert.equal(edited.product.measure, "122 × 102");
   assert.equal(edited.product.stockName, "Pallet especial");
-  assert.equal(edited.product.sourceCode, "P05");
-  assert.equal(edited.product.zetaCode, "1201");
+  assert.equal(edited.product.code, "1201");
   assert.deepEqual(edited.product.clientNames, ["Pamer"]);
-  assert.deepEqual(Object.keys(edited.product).sort(), ["attributes", "clientNames", "id", "kind", "measure", "requiresTreatment", "sourceCatalog", "sourceCode", "stockActive", "stockName", "treatment", "zetaCode"]);
+  assert.deepEqual(Object.keys(edited.product).sort(), ["attributes", "clientNames", "code", "heightCm", "id", "kind", "measure", "requiresTreatment", "stockActive", "stockName"]);
 
-  const deleteResponse = await request("/api/products/palbin-p05", { method: "DELETE" });
+  const deleteResponse = await request("/api/products/producto-05", { method: "DELETE" });
   assert.equal(deleteResponse.status, 200);
   const products = await (await request("/api/products")).json();
-  assert.equal(products.products.some((product) => product.id === "palbin-p05"), false);
+  assert.equal(products.products.some((product) => product.id === "producto-05"), false);
   assert.equal(products.products.length, before.length - 1);
 });
 
@@ -789,7 +785,7 @@ test("crea, actualiza y elimina proveedores mediante endpoints dedicados", async
 });
 
 test("cuenta toda la producción física al replanificar, incluso la enviada a stock general", async () => {
-  const fixture = await createMasterFixture({ name: `Producción real ${Date.now()}`, address: "Ruta 5", zetaCode: "REAL-01" });
+  const fixture = await createMasterFixture({ name: `Producción real ${Date.now()}`, address: "Ruta 5" });
   const created = await request("/api/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
     clientProductId: fixture.relation.id, requested: 30, orderDate: "2026-09-01", requestedDeliveryDate: "2026-09-10", plannedDate: "2026-09-10", stage: "produccion",
     productionSource: "internal", productionDate: "2026-09-07", requiredOperations: ["assembly"], transportSource: "internal",
@@ -803,23 +799,23 @@ test("cuenta toda la producción física al replanificar, incluso la enviada a s
     return (await response.json()).order.lines[0].productionAllocations.find((item) => item.status === "draft");
   };
   const first = await plan("2026-09-07", 10);
-  const before = (await (await request("/api/stock/palbin-p02")).json()).stock.movements.filter((item) => String(item.productionAllocationId) === String(first.id));
+  const before = (await (await request("/api/stock/producto-02")).json()).stock.movements.filter((item) => String(item.productionAllocationId) === String(first.id));
   assert.equal(before.length, 0);
   const stockResult = await request(`/api/production-allocations/${first.id}/result`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ actualQuantity: 13, actualDate: "2026-09-07", destination: "stock" }) });
   assert.equal(stockResult.status, 200);
   const duplicate = await request(`/api/production-allocations/${first.id}/result`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ actualQuantity: 13, actualDate: "2026-09-07", destination: "stock" }) });
   assert.equal(duplicate.status, 400);
-  const movements = (await (await request("/api/stock/palbin-p02")).json()).stock.movements.filter((item) => String(item.productionAllocationId) === String(first.id));
+  const movements = (await (await request("/api/stock/producto-02")).json()).stock.movements.filter((item) => String(item.productionAllocationId) === String(first.id));
   assert.equal(movements.length, 1);
   assert.equal(movements[0].quantity, 13);
   const second = await plan("2026-09-08", 10);
   const missed = await request(`/api/production-allocations/${second.id}/result`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ actualQuantity: 0, actualDate: "2026-09-08" }) });
   assert.equal(missed.status, 200);
-  const stockBeforeClient = (await (await request("/api/stock/summary")).json()).stock.find((item) => item.product.id === "palbin-p02");
+  const stockBeforeClient = (await (await request("/api/stock/summary")).json()).stock.find((item) => item.product.id === "producto-02");
   const third = await plan("2026-09-09", 10);
   const clientResult = await request(`/api/production-allocations/${third.id}/result`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ actualQuantity: 6, actualDate: "2026-09-09", destination: "client" }) });
   assert.equal(clientResult.status, 200);
-  const stockAfterClient = (await (await request("/api/stock/summary")).json()).stock.find((item) => item.product.id === "palbin-p02");
+  const stockAfterClient = (await (await request("/api/stock/summary")).json()).stock.find((item) => item.product.id === "producto-02");
   assert.equal(stockAfterClient.reserved, stockBeforeClient.reserved + 6);
   const fourth = await plan("2026-09-10", 11);
   assert.equal(fourth.plannedQuantity, 11);
@@ -833,12 +829,12 @@ test("cuenta toda la producción física al replanificar, incluso la enviada a s
 
 test("protege el stock asignado a un pedido al preparar viajes", async () => {
   const code = String(900000000 + (Date.now() % 100000000));
-  const productResponse = await request("/api/products", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "Pallet", measure: "197 x 91", zetaCode: code }) });
+  const productResponse = await request("/api/products", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "Pallet", measure: "197 x 91", code: code }) });
   if (!productResponse.ok) throw new Error(await productResponse.text());
   assert.equal(productResponse.status, 201);
   const { product } = await productResponse.json();
-  const first = await createMasterFixture({ name: `Reserva A ${Date.now()}`, address: "Ruta 5", zetaCode: `${code}-A`, productId: product.id });
-  const second = await createMasterFixture({ name: `Reserva B ${Date.now()}`, address: "Ruta 8", zetaCode: `${code}-B`, productId: product.id });
+  const first = await createMasterFixture({ name: `Reserva A ${Date.now()}`, address: "Ruta 5", productId: product.id });
+  const second = await createMasterFixture({ name: `Reserva B ${Date.now()}`, address: "Ruta 8", productId: product.id });
   const makeOrder = async (fixture) => {
     const response = await request("/api/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ clientProductId: fixture.relation.id, requested: 10, orderDate: "2026-09-01", requestedDeliveryDate: "2026-09-10", plannedDate: "2026-09-10", stage: "produccion", productionSource: "internal", productionDate: "2026-09-07", requiredOperations: ["assembly"], transportSource: "internal" }) });
     assert.equal(response.status, 201);

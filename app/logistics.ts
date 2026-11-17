@@ -113,7 +113,7 @@ export function loadWarnings(counts: Record<PalletClass, number>) {
 
 export function calculateLineAvailability(
   orders: OperationOrder[], stock: StockSummaryRow[], movements: StockMovement[],
-  batches: Array<{ orderLineId?: string; quantity: number; status: "posted" | "rejected" | "reversal" }>,
+  batches: Array<{ orderLineId?: string; quantity: number; status: "posted" | "reversal" }>,
 ): LineAvailability[] {
   const stockByProduct = new Map(stock.map((row) => [row.product.id, row]));
   const readyLeft = new Map(stock.map((row) => [row.product.id, Math.max(row.ready, 0)]));

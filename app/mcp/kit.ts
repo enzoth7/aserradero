@@ -117,6 +117,15 @@ export function pickKeys(data: unknown, keys?: string[]) {
   return Object.fromEntries(Object.entries(data).filter(([key]) => keys.includes(key)));
 }
 
+/** Quita de una respuesta las claves indicadas, a cualquier profundidad (datos que el dashboard ya no muestra). */
+export function omitKeys(value: unknown, keys: string[]): unknown {
+  if (Array.isArray(value)) return value.map((item) => omitKeys(item, keys));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)).map(([key, entry]) => [key, omitKeys(entry, keys)]));
+  }
+  return value;
+}
+
 export function count(value: unknown, key: string) {
   const list = (value as Record<string, unknown> | null)?.[key];
   return Array.isArray(list) ? list.length : 0;

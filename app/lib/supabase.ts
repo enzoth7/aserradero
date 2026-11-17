@@ -25,7 +25,7 @@ export async function supabaseRequest<T>(path: string, options: SupabaseRequestO
   const payload = body ? JSON.parse(body) : null;
   if (!response.ok) {
     const message = payload?.message ?? payload?.error_description ?? "Error al consultar Supabase.";
-    throw new Error(message);
+    throw new Error(String(message));
   }
   return payload as T;
 }
@@ -42,7 +42,7 @@ export async function supabaseServerRequest<T>(path: string, options: SupabaseRe
   const body = await response.text();
   const payload = body ? JSON.parse(body) : null;
   if (!response.ok) {
-    const error = new Error(payload?.message ?? payload?.error ?? "Error al consultar Supabase desde el servidor.") as Error & { code?: string };
+    const error = new Error(String(payload?.message ?? payload?.error ?? "Error al consultar Supabase desde el servidor.")) as Error & { code?: string };
     error.code = payload?.code;
     throw error;
   }

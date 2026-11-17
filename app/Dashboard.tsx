@@ -33,7 +33,7 @@ import { classifyPallet, type PalletClass } from "./logistics";
 import { ProductDraftFields, draftFromProduct, draftPayload, validateDraft, type ProductDraft } from "./components/ProductFields";
 import { AsyncButton, ConfirmDialog, EmptyState, FieldError, LoadingState, ModalShell, RowDeleteButton, StatusBadge, WeekNavigator } from "./components/ui";
 import {
-  compareProductsByInternalCode,
+  compareProductsByCode,
   getOrderOperationalStatus,
   getOrderPalletStages,
   getOrderPlannedDate,
@@ -474,7 +474,7 @@ function ProductsView({ products, levels, logisticsClasses, sizeError, onEdit, o
   // Una columna por nivel que algún producto use; Medida, Tratamiento y Logo propio siempre se muestran.
   const columns = useMemo(() => levels.filter((level) => level.id === MEASURE_LEVEL || level.id === TREATMENT_LEVEL || level.id === LOGO_LEVEL || catalog.some((product) => levelValue(product, level.id))), [levels, catalog]);
   const filterOptions = useMemo(() => Object.fromEntries(columns.map((level) => [level.id, [...new Set(catalog.map((product) => levelValue(product, level.id)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es", { numeric: true }))])) as Record<string, string[]>, [columns, catalog]);
-  const codeOptions = useMemo(() => [...new Set(catalog.map((product) => product.zetaCode).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, "es", { numeric: true })).map((value) => ({ value, label: value })), [catalog]);
+  const codeOptions = useMemo(() => [...new Set(catalog.map((product) => product.code).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, "es", { numeric: true })).map((value) => ({ value, label: value })), [catalog]);
   const typeOptions = useMemo(() => [...new Set(catalog.map((product) => product.kind))].map((value) => ({ value, label: productTypeLabel(value) })), [catalog]);
   const sizeOptions = ["Chico", "Grande", "Sin clasificar", "No aplica"].map((value) => ({ value, label: value }));
   const clientOptions = useMemo(() => [...new Set(catalogRows.map((row) => row.clientName || "Sin identificar"))].sort((a, b) => a.localeCompare(b, "es")).map((value) => ({ value, label: value })), [catalogRows]);
@@ -483,14 +483,14 @@ function ProductsView({ products, levels, logisticsClasses, sizeError, onEdit, o
     const normalized = productQuery.trim().toLocaleLowerCase("es");
     return catalogRows.filter(({ product, clientName }) => {
       if (productKind && product.kind !== productKind) return false;
-      if (filters.codigo && product.zetaCode !== filters.codigo) return false;
+      if (filters.codigo && product.code !== filters.codigo) return false;
       if (filters.tamano && sizeFor(product) !== filters.tamano) return false;
       if (filters.cliente && (clientName || "Sin identificar") !== filters.cliente) return false;
       if (columns.some((level) => filters[level.id] && levelValue(product, level.id) !== filters[level.id])) return false;
-      return !normalized || [product.stockName, product.zetaCode, product.kind, sizeFor(product), ...levels.map((level) => levelValue(product, level.id)), clientName]
+      return !normalized || [product.stockName, product.code, product.kind, sizeFor(product), ...levels.map((level) => levelValue(product, level.id)), clientName]
         .filter((value): value is string => Boolean(value))
         .some((value) => value.toLocaleLowerCase("es").includes(normalized));
-    }).sort((a, b) => compareProductsByInternalCode(a.product, b.product) || a.clientName.localeCompare(b.clientName, "es"));
+    }).sort((a, b) => compareProductsByCode(a.product, b.product) || a.clientName.localeCompare(b.clientName, "es"));
   }, [catalogRows, columns, filters, levels, productKind, productQuery, sizeFor]);
   const clearFilters = () => { setProductQuery(""); setProductKind(""); setFilters({}); };
   const minimumLevelWidth: Record<string, number> = {
@@ -525,7 +525,7 @@ function ProductsView({ products, levels, logisticsClasses, sizeError, onEdit, o
           </div>
           {visibleProducts.length > 0 ? visibleProducts.map(({ product, clientName }) => (
             <article className="product-row" key={`${product.id}:${clientName}`}>
-              <div><small className="column-label">Código</small><strong className="product-code">{product.zetaCode ?? "—"}</strong></div>
+              <div><small className="column-label">Código</small><strong className="product-code">{product.code ?? "—"}</strong></div>
               <div><small className="column-label">Tipo</small><button type="button" className="row-link" onClick={() => onEdit(product)} aria-label={`Editar ${product.stockName || productTypeLabel(product.kind)}`}>{productTypeLabel(product.kind)}</button></div>
               {columns.flatMap((level) => { const value = levelValue(product, level.id); return [<div key={level.id}><small className="column-label">{level.label}</small><strong className={value ? undefined : "product-client-empty"}>{value || (level.id === TREATMENT_LEVEL ? "" : "—")}</strong></div>, ...(level.id === MEASURE_LEVEL ? [<div key="tamano"><small className="column-label">Tamaño</small><strong>{sizeFor(product)}</strong></div>] : [])]; })}
               <div><small className="column-label">Cliente</small>{clientName ? <span className="chip-list"><span className="chip">{clientName}</span></span> : <strong className="product-client-empty">Sin identificar</strong>}</div>
@@ -599,7 +599,7 @@ function ProductFormModal({ product, products, levels, clients, palletClass = "a
   };
 
   return (
-    <ModalShell title={product ? "Producto" : "Nuevo producto"} description={product ? `${product.zetaCode ?? "Sin código"}: ${productDisplayName(product)}` : undefined} className="edit-product-modal product-sheet" onClose={onClose} dirty={dirty && !saving}>
+    <ModalShell title={product ? "Producto" : "Nuevo producto"} description={product ? `${product.code ?? "Sin código"}: ${productDisplayName(product)}` : undefined} className="edit-product-modal product-sheet" onClose={onClose} dirty={dirty && !saving}>
       <form onSubmit={save}>
         <ProductDraftFields draft={draft} setDraft={setDraft} levels={levels} />
         {product?.kind === "Pallet" && <fieldset className="sheet-group field-wide"><legend>Logística</legend>
@@ -898,7 +898,7 @@ function OrderTrackingPanel({ products, levels, logisticsClasses, order, refresh
           <tbody>{order.lines.map((line) => {
             const product = products.find((item) => item.id === line.productId);
             return <tr key={line.id}>
-              <td><strong className="product-code">{product?.zetaCode ?? "—"}</strong></td>
+              <td><strong className="product-code">{product?.code ?? "—"}</strong></td>
               <td>{product ? productTypeLabel(product.kind) : withoutPalletWord(line.product)}</td>
               {detailColumns.flatMap((level) => [<td key={level.id}>{product ? levelValue(product, level.id) || "—" : "—"}</td>, ...(level.id === MEASURE_LEVEL ? [<td key={`${level.id}-size`}>{product ? sizeLabel(product) : "—"}</td>] : [])])}
               <td className="num">{number.format(line.quantity)}</td>
@@ -942,7 +942,7 @@ function OrderTrackingPanel({ products, levels, logisticsClasses, order, refresh
             const assignedToClient = allocations.reduce((sum, allocation) => sum + (allocation.status === "completed" && allocation.resultDestination !== "stock" ? Math.max(allocation.actualQuantity ?? 0, 0) : 0), 0);
             const delivered = (order.shipments ?? []).flatMap((shipment) => shipment.lines).filter((entry) => entry.orderLineId === line.id).reduce((sum, entry) => sum + entry.deliveredQuantity, 0);
             const pending = Math.max(line.quantity - Math.max(produced, delivered), 0);
-            const requiresHT = productHeatTreatmentLabel(line.product) === "Con HT" || line.treatment === "Marcado" || line.treatment === "HT" || line.treatment === "Marcado y HT";
+            const requiresHT = productHeatTreatmentLabel(line.product) === "Con HT" || Boolean(line.requiresTreatment);
             const ready = Math.min(
               Math.max(line.quantity - delivered, 0),
               requiresHT
@@ -1253,7 +1253,7 @@ function AddOrderModal({ clientOptions, products, initialDeliveryDate, onClose, 
           {clientId && loadingProducts && <LoadingState label="Cargando productos" rows={2} />}
           {clientId && !loadingProducts && clientProducts.length === 0 && <p className="sheet-placeholder">Este cliente no tiene productos habilitados. <a href={`/clientes/${encodeURIComponent(clientId)}`}>Agregar productos al cliente</a></p>}
           {clientProducts.map((product) => { const id = String(product.id); const value = quantities[id] ?? 0; return <label key={id} className={`order-product-row ${value > 0 ? "selected" : ""}`}>
-            <span><strong>{product.label}</strong><small>Código {product.zetaCode || "—"}{product.treatmentRequired && !productHeatTreatmentLabel(product.label) ? " / Con HT" : ""}</small></span>
+            <span><strong>{product.label}</strong><small>Código {product.code || "—"}{product.treatmentRequired && !productHeatTreatmentLabel(product.label) ? " / Con HT" : ""}</small></span>
             <input type="number" min="0" step="1" inputMode="numeric" aria-label={`Cantidad de ${product.label}`} value={value || ""} placeholder="0" onChange={(event) => setQuantities((current) => ({ ...current, [id]: Math.max(Number(event.target.value) || 0, 0) }))} />
           </label>; })}
           {clientProducts.length > 0 && <output className="order-lines-total">Total del pedido: <strong>{number.format(quantity)} palets</strong></output>}
@@ -1321,7 +1321,7 @@ export default function Dashboard({ initialData, initialSection = "inicio", init
   const kpiPeriod: KpiPeriod = "week";
   const [orderRows, setOrderRows] = useState<OperationOrder[]>(() => initialData?.orders ?? []);
   const [providerRows, setProviderRows] = useState<Provider[]>(() => (initialData?.providers ?? []).filter(isActiveProvider));
-  const [productRows, setProductRows] = useState<Product[]>(() => [...(initialData?.products ?? [])].sort(compareProductsByInternalCode));
+  const [productRows, setProductRows] = useState<Product[]>(() => [...(initialData?.products ?? [])].sort(compareProductsByCode));
   const [logisticsClasses, setLogisticsClasses] = useState<Record<string, PalletClass> | null>(null);
   const [sizeError, setSizeError] = useState(false);
   useEffect(() => {
@@ -1385,7 +1385,7 @@ export default function Dashboard({ initialData, initialSection = "inicio", init
     void Promise.all([
       load("orders", Promise.all([get<{ orders?: OperationOrder[] }>("/api/orders"), get<{ history?: OperationOrder[] }>("/api/history")]).then(([orders, history]) => setOrderRows([...(orders.orders ?? []), ...(history.history ?? [])]))),
       load("providers", get<{ providers?: Provider[] }>("/api/providers").then((payload) => setProviderRows((payload.providers ?? []).filter(isActiveProvider)))),
-      load("products", get<{ products?: Product[] }>("/api/products").then((payload) => setProductRows([...(payload.products ?? [])].sort(compareProductsByInternalCode)))),
+      load("products", get<{ products?: Product[] }>("/api/products").then((payload) => setProductRows([...(payload.products ?? [])].sort(compareProductsByCode)))),
       load("clients", get<{ clients?: ClientSummary[] }>("/api/clients").then((payload) => setRegisteredClients((payload.clients ?? []).map((client) => ({ id: client.id, name: client.name, address: client.address, department: client.department, active: client.active }))))),
       load("levels", get<{ levels?: ProductLevel[] }>("/api/product-levels").then((payload) => { if (payload.levels?.length) setLevels(payload.levels); })),
     ]);
@@ -1624,7 +1624,7 @@ export default function Dashboard({ initialData, initialSection = "inicio", init
     const response = await fetch(id ? `/api/products/${id}` : "/api/products", { method: id ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(changes) });
     const payload = (await response.json()) as { product?: Product; error?: string };
     if (!response.ok || !payload.product) throw new Error(payload.error ?? "No se pudo guardar el producto.");
-    setProductRows((current) => [...current.filter((product) => product.id !== payload.product!.id), payload.product!].sort(compareProductsByInternalCode));
+    setProductRows((current) => [...current.filter((product) => product.id !== payload.product!.id), payload.product!].sort(compareProductsByCode));
     if (id && classChanged) {
       const classResponse = await fetch("/api/logistics/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "class", productId: id, palletClass }) });
       const classResult = await classResponse.json() as { error?: string };
@@ -1834,7 +1834,7 @@ export default function Dashboard({ initialData, initialSection = "inicio", init
         : section === "productos" ? <ProductsView products={productRows} levels={levels} logisticsClasses={logisticsClasses} sizeError={sizeError} onEdit={setEditingProduct} onDelete={(product) => requestDelete({ kind: "products", id: product.id, label: productDisplayName(product) })} onAdd={() => setShowAddProduct(true)} />
         : section === "niveles" ? <LevelsView levels={levels} onSaved={setLevels} />
         : section === "proveedores" ? <ProvidersView providers={providerRows} onEdit={setEditingProvider} onAdd={() => setShowAddProvider(true)} />
-        : <ClientMasterView clients={clients} products={productRows} levels={levels} initialClientId={initialClientId} onAdd={() => setShowAddClient(true)} onDelete={(id, name) => requestDelete({ kind: "clients", id, label: name })} onClientDeleted={clientDeleted} onClientUpdated={(updated) => setRegisteredClients((current) => current.map((client) => client.id === updated.id ? { ...client, name: updated.name, address: updated.address, department: updated.department, active: updated.active } : client))} onProductCreated={(product) => { setProductRows((current) => [...current.filter((item) => item.id !== product.id), product].sort(compareProductsByInternalCode)); void refreshLevels(); }} />}
+        : <ClientMasterView clients={clients} products={productRows} levels={levels} initialClientId={initialClientId} onAdd={() => setShowAddClient(true)} onDelete={(id, name) => requestDelete({ kind: "clients", id, label: name })} onClientDeleted={clientDeleted} onClientUpdated={(updated) => setRegisteredClients((current) => current.map((client) => client.id === updated.id ? { ...client, name: updated.name, address: updated.address, department: updated.department, active: updated.active } : client))} onProductCreated={(product) => { setProductRows((current) => [...current.filter((item) => item.id !== product.id), product].sort(compareProductsByCode)); void refreshLevels(); }} />}
         </Suspense>}
         </main>
 

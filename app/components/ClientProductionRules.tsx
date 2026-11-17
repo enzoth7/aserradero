@@ -11,7 +11,7 @@ import { useNavigate } from "../navigation-client";
 type Client = { id?: string; name: string };
 type Draft = { normal: string; maximum: string };
 const key = (productId: number | string, resourceId: number | string) => `${productId}:${resourceId}`;
-const draftStorageKey = "ecoase_client_production_rule_drafts";
+const draftStorageKey = "client_production_rule_drafts";
 const today = () => { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; };
 
 function kindFromLabel(label: string): ProductKind | undefined {
