@@ -16,16 +16,13 @@
     "test:e2e": "npm run build && playwright test",
     "test:data": "tsx --test tests/data-invariants.test.mjs tests/ui-foundations.test.mjs tests/stage03-invariants.test.mjs tests/stage04-invariants.test.mjs tests/stage05-invariants.test.mjs tests/stage06-invariants.test.mjs tests/logistics.test.mjs",
     "test:mcp": "tsx --test tests/mcp-operational.test.mjs tests/mcp-full.test.mjs tests/mcp-oauth.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "@tanstack/react-table": "9.2.4",
     "@types/leaflet": "^1.9.21",
     "@vercel/analytics": "^2.0.1",
-    "drizzle-orm": "0.45.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.33.0",
     "react": "19.2.6",
@@ -40,8 +37,6 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
-    "concurrently": "^9.2.1",
-    "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-react": "7.37.5",

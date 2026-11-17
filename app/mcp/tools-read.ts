@@ -160,15 +160,16 @@ export function registerReadTools(server: McpServer, context: ToolContext) {
     input: {
       consulta: z.string().optional().describe("Texto a buscar en nombre, medida o código."),
       tipo: z.enum(["Pallet", "Piso", "Bin"]).optional(),
+      activo: z.boolean().optional().describe("true = solo productos Activos; false = solo Inactivos. Cada producto trae su estado en commercialActive."),
       limite: z.number().int().min(1).max(300).default(100),
     },
-    run: async ({ consulta, tipo, limite }) => {
+    run: async ({ consulta, tipo, activo, limite }) => {
       const response = await callApi({ method: "GET", path: "/api/products" });
       if (!response.ok) return fail(apiErrorMessage(response));
       const needle = normalize(consulta ?? "");
       // El catálogo del dashboard no muestra los productos dados de baja (stockActive = false).
       const all = ((response.data as { products?: Array<Record<string, unknown>> }).products ?? []).filter((product) => product.stockActive !== false);
-      const found = all.filter((product) => (!tipo || product.kind === tipo) && (!needle || normalize(JSON.stringify(product)).includes(needle)));
+      const found = all.filter((product) => (!tipo || product.kind === tipo) && (activo === undefined || Boolean(product.commercialActive) === activo) && (!needle || normalize(JSON.stringify(product)).includes(needle)));
       return done(`Hay ${found.length} producto(s)${found.length > limite ? `; muestro ${limite}` : ""}.`, { total: found.length, productos: found.slice(0, limite) });
     },
   });

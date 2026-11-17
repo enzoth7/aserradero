@@ -1,5 +1,5 @@
 import { createProduct, getProducts } from "../store";
-import { parseClassification, parseClientIds, parseHeightCm, parseKind, parseRequiresTreatment } from "./parse";
+import { parseClassification, parseClientIds, parseCommercialActive, parseHeightCm, parseKind, parseRequiresTreatment } from "./parse";
 
 export async function GET() {
   return Response.json({ products: await getProducts() });
@@ -15,6 +15,7 @@ export async function POST(request: Request) {
       ...parseClassification(body),
       heightCm: parseHeightCm(body),
       requiresTreatment: parseRequiresTreatment(body),
+      commercialActive: parseCommercialActive(body),
       code: typeof body.code === "string" ? body.code : "",
       stockName: typeof body.stockName === "string" ? body.stockName : undefined,
       clientIds: parseClientIds(body.clientIds) ?? [],

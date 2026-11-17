@@ -73,8 +73,9 @@ test("Control Operativo usa una identidad y una hoja visual consolidada", async 
 
 test("stock deja la información secundaria en el detalle", async () => {
   const source = await readFile(stockPath, "utf8");
-  const mainTable = source.slice(source.indexOf('<table className="stock-table">'));
-  assert.match(mainTable, /<th>Artículo<\/th>[\s\S]*?<th>Código<\/th>[\s\S]*?<th>Medida<\/th>/);
+  const mainTable = source.slice(source.indexOf('<table className="stock-table"'));
+  assert.match(mainTable, /\["name", "Artículo", false\][\s\S]*?\["code", "Código", false\][\s\S]*?\["measure", "Medida", false\]/);
+  assert.match(mainTable, /<SortHeader[^>]*numeric \/>/);
   assert.match(mainTable, /row\.product\.code \?\? "—"/);
   assert.doesNotMatch(mainTable, /sourceCode|sourceCatalog/);
   assert.doesNotMatch(mainTable, /<th>Próxima entrega<\/th>/);

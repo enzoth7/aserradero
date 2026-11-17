@@ -8,8 +8,11 @@ import { productLabel, type ClientDetail, type ClientProduct } from "../master-d
 import { uruguayDepartments } from "../uruguay-departments";
 import { AsyncButton, ConfirmDialog, EmptyState, FieldError, LoadingState, ModalShell, RowDeleteButton } from "./ui";
 import ColumnFilter from "./ColumnFilter";
+import SortHeader, { compareValues, type SortState } from "./SortHeader";
 import { ProductDraftFields, draftFromProduct, draftPayload, validateDraft, type ProductDraft } from "./ProductFields";
 import { AppLink, useNavigate } from "../navigation-client";
+
+type ClientSortKey = "name" | "address" | "products" | "orders" | "pallets";
 
 export type ClientSummary = {
   id?: string;
@@ -275,6 +278,7 @@ export default function ClientMasterView({ clients, products, levels, onAdd, onD
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("");
   const [status, setStatus] = useState<"" | "active" | "inactive">("");
+  const [sort, setSort] = useState<SortState<ClientSortKey>>(null);
   const productCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const product of products) for (const name of product.clientNames ?? []) counts.set(name, (counts.get(name) ?? 0) + 1);
@@ -285,8 +289,12 @@ export default function ClientMasterView({ clients, products, levels, onAdd, onD
     const normalized = query.trim().toLocaleLowerCase("es");
     return clients
       .filter((client) => (!department || client.department === department) && (!status || (status === "active") === (client.active !== false)) && (!normalized || [client.name, client.address, client.department].some((value) => value?.toLocaleLowerCase("es").includes(normalized))))
-      .sort((a, b) => b.activePallets - a.activePallets || a.name.localeCompare(b.name, "es"));
-  }, [clients, department, query, status]);
+      .sort((a, b) => {
+        if (!sort) return b.activePallets - a.activePallets || a.name.localeCompare(b.name, "es");
+        const value = (client: ClientSummary) => sort.key === "name" ? client.name : sort.key === "address" ? client.address : sort.key === "products" ? productCounts.get(client.name) ?? 0 : sort.key === "orders" ? client.activeOrders : client.activePallets;
+        return compareValues(value(a), value(b), sort.direction) || a.name.localeCompare(b.name, "es");
+      });
+  }, [clients, department, productCounts, query, sort, status]);
   if (initialClientId) {
     const client = clients.find((item) => item.id === initialClientId);
     return <section className="clients-surface client-detail-surface" aria-labelledby="client-detail-title">
@@ -319,9 +327,9 @@ export default function ClientMasterView({ clients, products, levels, onAdd, onD
       <div className="products-scroll">
         <div className="clients-board" aria-label={`${visible.length} clientes`}>
           <div className="data-heading clients-heading">
-            <div>Cliente</div><div>Dirección</div>
+            <SortHeader label="Cliente" sortKey="name" sort={sort} onSort={setSort} /><SortHeader label="Dirección" sortKey="address" sort={sort} onSort={setSort} />
             <ColumnFilter label="Departamento" value={department} onChange={setDepartment} options={departments.map((value) => ({ value, label: value }))} />
-            <div>Productos</div><div>Pedidos activos</div><div>Palets activos</div>
+            <SortHeader label="Productos" sortKey="products" sort={sort} onSort={setSort} numeric /><SortHeader label="Pedidos activos" sortKey="orders" sort={sort} onSort={setSort} numeric /><SortHeader label="Palets activos" sortKey="pallets" sort={sort} onSort={setSort} numeric />
             <ColumnFilter label="Estado" value={status} onChange={(value) => setStatus(value as "" | "active" | "inactive")} options={[{ value: "active", label: "Disponible" }, { value: "inactive", label: "No disponible" }]} />
             <div className="sr-only">Acciones</div>
           </div>

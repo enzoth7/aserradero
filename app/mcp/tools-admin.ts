@@ -313,6 +313,7 @@ export function registerAdminTools(server: McpServer, context: ToolContext) {
     codigo: z.string().optional().describe("Código numérico del producto. Obligatorio al crear."),
     nombreStock: z.string().optional(),
     clienteIds: z.array(z.string()).optional().describe("Clientes asociados."),
+    activo: z.boolean().optional().describe("Estado comercial en el catálogo: true = Activo, false = Inactivo. Si se omite, no cambia (los productos nuevos arrancan inactivos)."),
   };
   tool(server, context, {
     name: "guardar_producto",
@@ -324,7 +325,7 @@ export function registerAdminTools(server: McpServer, context: ToolContext) {
       if (args.productoId === undefined && (!args.tipo || !args.codigo)) return fail("Para crear un producto indicá tipo y código.");
       const body = clean({
         kind: args.tipo, measure: args.medida, attributes: args.atributos, heightCm: args.alturaCm, requiresTreatment: args.requiereHT,
-        code: args.codigo, stockName: args.nombreStock, clientIds: args.clienteIds,
+        code: args.codigo, stockName: args.nombreStock, clientIds: args.clienteIds, commercialActive: args.activo,
       });
       if (args.productoId !== undefined && !args.tipo) {
         const current = await callApi({ method: "GET", path: "/api/products" });

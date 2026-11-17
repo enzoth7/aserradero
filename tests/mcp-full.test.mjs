@@ -129,6 +129,17 @@ test("crear un producto desde el MCP pide solo tipo y código", async () => {
     const created = await call("guardar_producto", { tipo: "Pallet", medida: "118 x 98", codigo: "9101" });
     assert.equal(created.isError, false, created.text);
     assert.equal(created.data.product.code, "9101");
+    assert.equal(Boolean(created.data.product.commercialActive), false, "los productos nuevos arrancan inactivos");
+
+    // El estado Activo / Inactivo se cambia y se filtra desde el MCP.
+    const activated = await call("guardar_producto", { productoId: created.data.product.id, medida: "118 x 98", activo: true });
+    assert.equal(activated.isError, false, activated.text);
+    assert.equal(activated.data.product.commercialActive, true);
+    const activeList = await call("listar_productos", { activo: true, limite: 300 });
+    assert.ok(activeList.data.productos.some((item) => item.id === created.data.product.id));
+    assert.ok(activeList.data.productos.every((item) => item.commercialActive === true));
+    const inactiveList = await call("listar_productos", { activo: false, limite: 300 });
+    assert.ok(!inactiveList.data.productos.some((item) => item.id === created.data.product.id));
 
     const client = await call("guardar_cliente", { nombre: "Cliente sin controles MCP", direccion: "Ruta 1 km 10", departamento: "Colonia" });
     const enabled = await call("habilitar_producto_cliente", { clienteId: client.data.client.id, productoId: created.data.product.id });

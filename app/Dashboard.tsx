@@ -456,6 +456,11 @@ function productTypeLabel(kind: Product["kind"]) {
   return kind === "Pallet" ? "Pallets" : kindNames[kind];
 }
 
+/** Estado comercial del producto en el catálogo; los productos sin dato figuran inactivos. */
+type ProductStatus = "Activo" | "Inactivo";
+const productStatus = (product: Product): ProductStatus => product.commercialActive ? "Activo" : "Inactivo";
+const statusOptions = (["Activo", "Inactivo"] as const).map((value) => ({ value, label: value }));
+
 function ProductsView({ products, levels, logisticsClasses, sizeError, onEdit, onDelete, onAdd }: { products: Product[]; levels: ProductLevel[]; logisticsClasses: Record<string, PalletClass> | null; sizeError: boolean; onEdit: (product: Product) => void; onDelete: (product: Product) => void; onAdd: () => void }) {
   const catalog = useMemo(() => products.filter((product) => product.stockActive !== false), [products]);
   const sizeFor = useCallback((product: Product) => {
@@ -485,6 +490,7 @@ function ProductsView({ products, levels, logisticsClasses, sizeError, onEdit, o
       if (productKind && product.kind !== productKind) return false;
       if (filters.codigo && product.code !== filters.codigo) return false;
       if (filters.tamano && sizeFor(product) !== filters.tamano) return false;
+      if (filters.estado && productStatus(product) !== filters.estado) return false;
       if (filters.cliente && (clientName || "Sin identificar") !== filters.cliente) return false;
       if (columns.some((level) => filters[level.id] && levelValue(product, level.id) !== filters[level.id])) return false;
       return !normalized || [product.stockName, product.code, product.kind, sizeFor(product), ...levels.map((level) => levelValue(product, level.id)), clientName]
@@ -499,7 +505,7 @@ function ProductsView({ products, levels, logisticsClasses, sizeError, onEdit, o
   };
   const levelColumns = columns.flatMap((level) => [`minmax(${minimumLevelWidth[level.label] ?? 80}px, ${level.label === "Identificación" ? 1.2 : 1}fr)`, ...(level.id === MEASURE_LEVEL ? ["minmax(86px, 1fr)"] : [])]).join(" ");
   const compactLevelColumns = columns.flatMap((level) => [`minmax(${["Identificación", "Terminación", "Tratamiento", "Corte esquina"].includes(level.label) ? 90 : 64}px, 1fr)`, ...(level.id === MEASURE_LEVEL ? ["minmax(70px, 1fr)"] : [])]).join(" ");
-  const boardStyle = { "--product-columns": `78px minmax(64px, 1fr) ${levelColumns} minmax(90px, 1fr) 96px`, "--product-columns-compact": `70px minmax(58px, 1fr) ${compactLevelColumns} minmax(72px, 1fr) 96px`, "--products-min-width": "0px" } as CSSProperties;
+  const boardStyle = { "--product-columns": `78px minmax(64px, 1fr) ${levelColumns} minmax(78px, .7fr) minmax(90px, 1fr) 96px`, "--product-columns-compact": `70px minmax(58px, 1fr) ${compactLevelColumns} minmax(64px, .6fr) minmax(72px, 1fr) 96px`, "--products-min-width": "0px" } as CSSProperties;
 
   return (
     <section className="module-surface products-surface" aria-labelledby="products-page-title">
@@ -521,6 +527,7 @@ function ProductsView({ products, levels, logisticsClasses, sizeError, onEdit, o
             <ColumnFilter label="Código" value={filters.codigo ?? ""} onChange={(value) => setFilters((current) => ({ ...current, codigo: value }))} options={codeOptions} />
             <ColumnFilter label="Tipo" value={productKind} onChange={(value) => setProductKind(value as Product["kind"] | "")} options={typeOptions} />
             {columns.flatMap((level) => [<ColumnFilter key={level.id} label={level.label} value={filters[level.id] ?? ""} onChange={(value) => setFilters((current) => ({ ...current, [level.id]: value }))} options={filterOptions[level.id].map((value) => ({ value, label: value }))} />, ...(level.id === MEASURE_LEVEL ? [<ColumnFilter key="tamano" label="Tamaño" value={filters.tamano ?? ""} onChange={(value) => setFilters((current) => ({ ...current, tamano: value }))} options={sizeOptions} />] : [])])}
+            <ColumnFilter label="Estado" value={filters.estado ?? ""} onChange={(value) => setFilters((current) => ({ ...current, estado: value }))} options={statusOptions} />
             <ColumnFilter label="Cliente" value={filters.cliente ?? ""} onChange={(value) => setFilters((current) => ({ ...current, cliente: value }))} options={clientOptions} /><div className="sr-only">Acciones</div>
           </div>
           {visibleProducts.length > 0 ? visibleProducts.map(({ product, clientName }) => (
@@ -528,6 +535,7 @@ function ProductsView({ products, levels, logisticsClasses, sizeError, onEdit, o
               <div><small className="column-label">Código</small><strong className="product-code">{product.code ?? "—"}</strong></div>
               <div><small className="column-label">Tipo</small><button type="button" className="row-link" onClick={() => onEdit(product)} aria-label={`Editar ${product.stockName || productTypeLabel(product.kind)}`}>{productTypeLabel(product.kind)}</button></div>
               {columns.flatMap((level) => { const value = levelValue(product, level.id); return [<div key={level.id}><small className="column-label">{level.label}</small><strong className={value ? undefined : "product-client-empty"}>{value || (level.id === TREATMENT_LEVEL ? "" : "—")}</strong></div>, ...(level.id === MEASURE_LEVEL ? [<div key="tamano"><small className="column-label">Tamaño</small><strong>{sizeFor(product)}</strong></div>] : [])]; })}
+              <div><small className="column-label">Estado</small><span className={`status-badge ${productStatus(product) === "Activo" ? "active" : "inactive"}`}>{productStatus(product)}</span></div>
               <div><small className="column-label">Cliente</small>{clientName ? <span className="chip-list"><span className="chip">{clientName}</span></span> : <strong className="product-client-empty">Sin identificar</strong>}</div>
               <span className="product-row-actions">
                 <button type="button" className="product-edit" onClick={() => onEdit(product)} aria-label={`Editar ${product.kind}${product.measure ? ` ${product.measure}` : ""}`}><Pencil size={17} aria-hidden="true" /></button>

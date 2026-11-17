@@ -284,11 +284,14 @@ export interface Product {
   id: string;
   kind: ProductKind;
   measure?: string;
+  /** Altura en cm. Dato informativo: no se usa para calcular volumen. */
   heightCm?: number;
   requiresTreatment: boolean;
   stockName?: string;
   code?: string;
   stockActive?: boolean;
+  /** Estado comercial en el catálogo: true = Activo. Los productos sin dato figuran inactivos. */
+  commercialActive?: boolean;
   clientNames?: string[];
   /** Valor por nivel (entrada, taco, refuerzo, exportación, tratamiento…). Ver classification.ts. Los productos viejos no lo tienen. */
   attributes?: Record<string, string>;

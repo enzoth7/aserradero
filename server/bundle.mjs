@@ -1352,7 +1352,7 @@ async function deleteClient(id) {
 }
 function mapProduct(row) {
   const attributes = row.attributes != null ? cleanAttributes(row.attributes) : void 0;
-  return { id: row.id, kind: row.kind, measure: row.measure ?? void 0, heightCm: row.kind === "Pallet" ? row.height_cm ?? 10 : row.height_cm ?? void 0, requiresTreatment: row.requires_treatment, stockName: row.stock_name ?? void 0, code: row.code ?? void 0, stockActive: row.stock_active ?? true, ...attributes !== void 0 ? { attributes } : {} };
+  return { id: row.id, kind: row.kind, measure: row.measure ?? void 0, heightCm: row.kind === "Pallet" ? row.height_cm ?? 10 : row.height_cm ?? void 0, requiresTreatment: row.requires_treatment, stockName: row.stock_name ?? void 0, code: row.code ?? void 0, stockActive: row.stock_active ?? true, commercialActive: row.commercial_active ?? false, ...attributes !== void 0 ? { attributes } : {} };
 }
 function mapClientProduct(row) {
   const product = mapProduct(Array.isArray(row.products) ? row.products[0] : row.products);
@@ -1604,18 +1604,26 @@ async function createProduct(input) {
       body: JSON.stringify({ p_kind: input.kind, p_measure: measure, p_height_cm: heightCm, p_attributes: attributes, p_code: code, p_stock_name: stockName, p_client_ids: clientIds })
     }).catch(levelsMigrationError);
     await rememberLevelOptions(measure, attributes);
+    if (input.commercialActive !== void 0) await saveCommercialActive(id, input.commercialActive);
     const product = (await getProducts()).find((item) => item.id === id);
     if (!product) throw new Error("El producto se cre\xF3 pero no pudo recuperarse.");
     return product;
   }
   if (memoryProducts.some((product) => product.code?.toLocaleUpperCase("es") === code)) throw new Error(`Ya existe un producto con el c\xF3digo ${code}.`);
-  const draft = { id: `producto-${crypto.randomUUID()}`, kind: input.kind, measure, heightCm: heightCm ?? void 0, attributes, requiresTreatment, code, stockName };
+  const draft = { id: `producto-${crypto.randomUUID()}`, kind: input.kind, measure, heightCm: heightCm ?? void 0, attributes, requiresTreatment, code, stockName, commercialActive: input.commercialActive ?? false };
   const twin = memoryProducts.find((product) => productKey(product) === productKey(draft));
   if (twin) throw new Error(`Ya existe un producto con esa clasificaci\xF3n (c\xF3digo ${twin.code ?? twin.id}).`);
   memoryProducts.push(draft);
   await rememberLevelOptions(measure, attributes);
   for (const clientId of clientIds) await assignClientToProduct(draft.id, clientId);
   return (await getProducts()).find((item) => item.id === draft.id) ?? draft;
+}
+async function saveCommercialActive(productId, active) {
+  await supabaseServerRequest(`/rest/v1/products?id=eq.${encodeURIComponent(productId)}`, {
+    method: "PATCH",
+    prefer: "return=minimal",
+    body: JSON.stringify({ commercial_active: active })
+  });
 }
 async function assignClientToProduct(productId, clientId) {
   const client = (await getClients()).find((item) => item.id === clientId);
@@ -1668,6 +1676,7 @@ async function updateProduct(id, input) {
       body: JSON.stringify({ p_id: id, p_kind: input.kind, p_measure: measure, p_height_cm: heightCm ?? null, p_height_provided: heightCm !== void 0, p_attributes: attributes, p_code: code ?? null, p_stock_name: stockName ?? null })
     }).catch(levelsMigrationError);
     await rememberLevelOptions(measure, attributes);
+    if (input.commercialActive !== void 0) await saveCommercialActive(id, input.commercialActive);
     if (input.clientIds) await supabaseServerRequest("/rest/v1/rpc/set_product_clients_v1", { method: "POST", body: JSON.stringify({ p_product_id: id, p_client_ids: [...new Set(input.clientIds)] }) });
     else if (input.clientId) await assignClientToProduct(id, input.clientId);
     const products2 = await getProducts();
@@ -1681,7 +1690,7 @@ async function updateProduct(id, input) {
   const candidate = { ...product, kind: input.kind, measure, attributes, requiresTreatment };
   const twin = memoryProducts.find((item) => item.id !== id && productKey(item) === productKey(candidate));
   if (twin) throw new Error(`Ya existe un producto con esa clasificaci\xF3n (c\xF3digo ${twin.code ?? twin.id}).`);
-  Object.assign(product, { kind: input.kind, measure, attributes, requiresTreatment, ...heightCm !== void 0 ? { heightCm: heightCm ?? void 0 } : {}, ...stockName ? { stockName } : {}, ...code ? { code } : {} });
+  Object.assign(product, { kind: input.kind, measure, attributes, requiresTreatment, ...heightCm !== void 0 ? { heightCm: heightCm ?? void 0 } : {}, ...stockName ? { stockName } : {}, ...code ? { code } : {}, ...input.commercialActive !== void 0 ? { commercialActive: input.commercialActive } : {} });
   await rememberLevelOptions(measure, attributes);
   if (code) memoryClientProducts.filter((item) => item.productId === id).forEach((item) => {
     item.code = code;
@@ -3206,11 +3215,9 @@ function tripWarnings(run, runs, settings) {
   }
   return [...new Set(warnings)];
 }
-var LARGE_REFERENCE_FOOTPRINT_M2;
 var init_logistics = __esm({
   "app/logistics.ts"() {
     "use strict";
-    LARGE_REFERENCE_FOOTPRINT_M2 = 2.2 * 1.17;
   }
 });
 
@@ -3261,6 +3268,8 @@ function vehicleFromRow(row) {
     habitualDriverId: str(row.habitual_driver_id),
     lengthM: num(row.length_m),
     widthM: num(row.width_m),
+    zorraLengthM: num(row.zorra_length_m),
+    zorraWidthM: num(row.zorra_width_m),
     heightM: num(row.height_m),
     weightT: num(row.weight_t),
     active: row.active !== false
@@ -3439,6 +3448,14 @@ async function saveLogisticsConfig(kind, payload) {
     const smallCapacity = num(payload.smallCapacity);
     if (largeCapacity !== void 0 && smallCapacity !== void 0 && largeCapacity > smallCapacity)
       throw new Error("La capacidad m\xEDnima no puede superar la m\xE1xima.");
+    for (const [label, value] of [
+      ["largo del cami\xF3n", payload.lengthM],
+      ["ancho del cami\xF3n", payload.widthM],
+      ["largo de la zorra", payload.zorraLengthM],
+      ["ancho de la zorra", payload.zorraWidthM]
+    ])
+      if (value !== void 0 && value !== null && (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 99))
+        throw new Error(`El ${label} debe ser un n\xFAmero de metros mayor que cero.`);
     const vehicle = {
       id,
       name,
@@ -3447,6 +3464,8 @@ async function saveLogisticsConfig(kind, payload) {
       habitualDriverId: str(payload.habitualDriverId),
       lengthM: num(payload.lengthM),
       widthM: num(payload.widthM),
+      zorraLengthM: num(payload.zorraLengthM),
+      zorraWidthM: num(payload.zorraWidthM),
       heightM: num(payload.heightM),
       weightT: num(payload.weightT),
       active: payload.active !== false
@@ -3463,6 +3482,8 @@ async function saveLogisticsConfig(kind, payload) {
       habitual_driver_id: vehicle.habitualDriverId ?? null,
       length_m: vehicle.lengthM ?? null,
       width_m: vehicle.widthM ?? null,
+      zorra_length_m: vehicle.zorraLengthM ?? null,
+      zorra_width_m: vehicle.zorraWidthM ?? null,
       height_m: vehicle.heightM ?? null,
       weight_t: vehicle.weightT ?? null,
       active: vehicle.active
@@ -3754,9 +3775,11 @@ async function evaluateLogisticsRoute(id) {
           });
         }
         const vehicle = config.vehicles.find((item) => item.id === run.vehicleId);
+        const combinedLength = vehicle?.lengthM === void 0 ? void 0 : vehicle.lengthM + (vehicle.zorraLengthM ?? 0);
+        const combinedWidth = vehicle?.widthM === void 0 ? void 0 : Math.max(vehicle.widthM, vehicle.zorraWidthM ?? 0);
         const restrictions = Object.fromEntries([
-          ["length", vehicle?.lengthM],
-          ["width", vehicle?.widthM],
+          ["length", combinedLength],
+          ["width", combinedWidth],
           ["height", vehicle?.heightM],
           ["weight", vehicle?.weightT]
         ].filter((pair) => typeof pair[1] === "number"));
@@ -3839,10 +3862,11 @@ var init_logistics_store = __esm({
     memory = process.env.DATA_BACKEND === "memory";
     defaultDrivers = [{ id: "susalla", name: "Susalla", active: true }, { id: "giossa", name: "Giossa", active: true }];
     defaultVehicles = [
-      { id: "howo", name: "HOWO grande", smallCapacity: 638, largeCapacity: 273, active: true },
-      { id: "vw_camion", name: "Volkswagen cami\xF3n", smallCapacity: 638, largeCapacity: 273, habitualDriverId: "susalla", active: true },
-      { id: "vw_tractor", name: "Volkswagen tractor", smallCapacity: 560, largeCapacity: 251, habitualDriverId: "giossa", active: true },
-      { id: "internacional", name: "Internacional", smallCapacity: 638, largeCapacity: 273, active: true }
+      { id: "howo", name: "HOWO grande", smallCapacity: 638, largeCapacity: 273, lengthM: 7.5, widthM: 2.4, zorraLengthM: 8, zorraWidthM: 2.4, active: true },
+      { id: "vw_camion", name: "Volkswagen cami\xF3n", smallCapacity: 638, largeCapacity: 273, habitualDriverId: "susalla", lengthM: 7.1, widthM: 2.4, zorraLengthM: 8, zorraWidthM: 2.4, active: true },
+      { id: "vw_tractor", name: "Volkswagen tractor", smallCapacity: 560, largeCapacity: 251, habitualDriverId: "giossa", lengthM: 14.5, widthM: 2.4, active: true },
+      { id: "internacional", name: "Internacional", smallCapacity: 638, largeCapacity: 273, lengthM: 5.5, widthM: 2.4, zorraLengthM: 10, zorraWidthM: 2.4, active: true },
+      { id: "ford", name: "Ford", lengthM: 5.1, widthM: 2.4, active: true }
     ];
     defaultSettings = { originAddress: "Paysand\xFA, Uruguay", originPrecision: "city" };
     memoryDrivers = structuredClone(defaultDrivers);
@@ -4466,6 +4490,9 @@ function parseHeightCm(body) {
     throw new Error("La altura debe ser positiva y tener como m\xE1ximo dos decimales.");
   return body.heightCm;
 }
+function parseCommercialActive(body) {
+  return typeof body.commercialActive === "boolean" ? body.commercialActive : void 0;
+}
 function parseRequiresTreatment(body) {
   return typeof body.requiresTreatment === "boolean" ? body.requiresTreatment : void 0;
 }
@@ -4498,6 +4525,7 @@ async function POST6(request) {
       ...parseClassification(body),
       heightCm: parseHeightCm(body),
       requiresTreatment: parseRequiresTreatment(body),
+      commercialActive: parseCommercialActive(body),
       code: typeof body.code === "string" ? body.code : "",
       stockName: typeof body.stockName === "string" ? body.stockName : void 0,
       clientIds: parseClientIds(body.clientIds) ?? []
@@ -5312,6 +5340,7 @@ async function PATCH8(request, { params }) {
       ...parseClassification(body),
       heightCm: parseHeightCm(body),
       requiresTreatment: parseRequiresTreatment(body),
+      commercialActive: parseCommercialActive(body),
       stockName: typeof body.stockName === "string" ? body.stockName : void 0,
       code: typeof body.code === "string" ? body.code : void 0,
       clientId: typeof body.clientId === "string" && body.clientId ? body.clientId : void 0,
@@ -6537,7 +6566,7 @@ function registerLogisticsTools(server, context) {
     title: "Guardar configuraci\xF3n de Log\xEDstica",
     description: [
       "Crea o actualiza un dato de configuraci\xF3n de Log\xEDstica seg\xFAn `tipo`; `datos` lleva los campos de ese tipo:",
-      "\u2022 vehicle: id, name, smallCapacity (chicos), largeCapacity (grandes), habitualDriverId, lengthM, widthM, heightM, weightT, active.",
+      "\u2022 vehicle: id, name, smallCapacity (chicos), largeCapacity (grandes), habitualDriverId, lengthM / widthM (cami\xF3n, en metros; ancho est\xE1ndar 2,4), zorraLengthM / zorraWidthM (zorra, en metros), heightM, weightT, active.",
       "\u2022 driver: id, name, active.",
       "\u2022 settings: originAddress, shiftStart, shiftEnd (HH:MM), breakMinutes, loadMinutes, unloadMinutes, marginMinutes.",
       "\u2022 class: productId, palletClass (small | large | unclassified | auto), reason.",

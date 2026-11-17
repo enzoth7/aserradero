@@ -30,12 +30,13 @@ export type ProductDraft = {
   attributes: ProductAttributes;
   code: string;
   stockName: string;
+  commercialActive: boolean;
   nameTouched: boolean;
 };
 
 export function draftFromProduct(product: Product | undefined, products: Product[], levels: ProductLevel[]): ProductDraft {
   if (!product) {
-    return { kind: "Pallet", measure: "", lengthCm: "", widthCm: "", heightCm: "10", attributes: {}, code: suggestNextCode(products), stockName: "", nameTouched: false };
+    return { kind: "Pallet", measure: "", lengthCm: "", widthCm: "", heightCm: "10", attributes: {}, code: suggestNextCode(products), stockName: "", commercialActive: false, nameTouched: false };
   }
   const dimensions = palletDimensionsCm(product.measure);
   const draft: ProductDraft = {
@@ -47,6 +48,7 @@ export function draftFromProduct(product: Product | undefined, products: Product
     attributes: { ...cleanAttributes(product.attributes), [TREATMENT_LEVEL]: treatmentOf(product) },
     code: product.code ?? "",
     stockName: product.stockName ?? "",
+    commercialActive: product.commercialActive ?? false,
     nameTouched: false,
   };
   // Un nombre distinto del generado (productos viejos o con nombre propio) se respeta tal cual.
@@ -70,7 +72,7 @@ export function draftName(draft: ProductDraft, levels: ProductLevel[]) {
 /** Lo que viaja a la API: medida, un valor por nivel y el nombre final. */
 export function draftPayload(draft: ProductDraft, levels: ProductLevel[], clientIds?: string[]) {
   const shape = toProductShape(draft);
-  return { kind: shape.kind, measure: shape.measure, heightCm: draft.kind === "Pallet" && draft.heightCm.trim() ? Number(draft.heightCm.trim().replace(",", ".")) : null, attributes: shape.attributes, code: draft.code.trim(), stockName: draftName(draft, levels).trim(), ...(clientIds ? { clientIds } : {}) };
+  return { kind: shape.kind, measure: shape.measure, heightCm: draft.kind === "Pallet" && draft.heightCm.trim() ? Number(draft.heightCm.trim().replace(",", ".")) : null, attributes: shape.attributes, code: draft.code.trim(), stockName: draftName(draft, levels).trim(), commercialActive: draft.commercialActive, ...(clientIds ? { clientIds } : {}) };
 }
 
 export function validateDraft(draft: ProductDraft, products: Product[], editingId?: string) {
@@ -160,6 +162,12 @@ export function ProductDraftFields({ draft, setDraft, levels }: { draft: Product
       <fieldset className="sheet-group"><legend>Identificación</legend>
         <label className="option-field"><span>Código <em aria-hidden="true">*</em></span>
           <input value={draft.code} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} required inputMode="numeric" pattern="[1-9][0-9]*" autoComplete="off" />
+        </label>
+        <label className="option-field"><span>Estado</span>
+          <select value={draft.commercialActive ? "active" : "inactive"} onChange={(event) => setDraft((current) => ({ ...current, commercialActive: event.target.value === "active" }))}>
+            <option value="inactive">Inactivo</option>
+            <option value="active">Activo</option>
+          </select>
         </label>
         <label className="option-field"><span>Nombre</span>
           <input value={draftName(draft, levels)} onChange={(event) => setDraft((current) => ({ ...current, stockName: event.target.value, nameTouched: true }))} placeholder="Se arma con la clasificación" />

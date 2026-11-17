@@ -3,6 +3,7 @@
 import { ArrowDownToLine, ChevronRight, RotateCcw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { AsyncButton, FieldError, LoadingState, ModalShell } from "./components/ui";
+import SortHeader, { compareValues, type SortState } from "./components/SortHeader";
 import { canonicalProductName } from "./classification";
 import type { OperationOrder, Provider } from "./data";
 import { movementStateLabel, orderStockReservations, scopeStockInventory, stockQuantityBreakdown, type StockDetail, type StockInventoryScope, type StockQuantityField, type StockSummaryRow } from "./stock";
@@ -27,6 +28,7 @@ const stockKpis = [
   { field: "available", label: "Disponible" },
 ] as const;
 type StockSummaryFilter = StockQuantityField | "";
+type StockSortKey = "name" | "code" | "measure" | StockQuantityField;
 
 async function requestStockPage(): Promise<StockPagePayload> {
   const [stockResponse, providersResponse] = await Promise.all([fetch("/api/stock/summary?destinos=1"), fetch("/api/providers")]);
@@ -168,6 +170,7 @@ export default function StockView({ scope, focusProductId }: { scope: StockInven
 function StockInventory({ title, rows, providers, loading, error, onChanged, focusProductId }: { title: string; rows: StockSummaryRow[]; providers: Provider[]; loading: boolean; error: string; onChanged: () => Promise<void>; focusProductId?: string }) {
   const [query, setQuery] = useState("");
   const [summaryFilter, setSummaryFilter] = useState<StockSummaryFilter>("");
+  const [sort, setSort] = useState<SortState<StockSortKey>>(null);
   const [selectedId, setSelectedId] = useState<string | null>(focusProductId ?? null);
   const [seenFocus, setSeenFocus] = useState(focusProductId);
   if (seenFocus !== focusProductId) { setSeenFocus(focusProductId); if (focusProductId) setSelectedId(focusProductId); }
@@ -178,8 +181,12 @@ function StockInventory({ title, rows, providers, loading, error, onChanged, foc
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("es");
     return rows.filter((row) => (!summaryFilter || row[summaryFilter] > 0) && (!normalized || [productName(row), row.product.measure, row.product.code].some((value) => value?.toLocaleLowerCase("es").includes(normalized))))
-      .sort((a, b) => productName(a).localeCompare(productName(b), "es"));
-  }, [query, rows, summaryFilter]);
+      .sort((a, b) => {
+        if (!sort) return productName(a).localeCompare(productName(b), "es");
+        const value = (row: StockSummaryRow) => sort.key === "name" ? productName(row) : sort.key === "code" ? row.product.code : sort.key === "measure" ? row.product.measure : row[sort.key];
+        return compareValues(value(a), value(b), sort.direction) || productName(a).localeCompare(productName(b), "es");
+      });
+  }, [query, rows, summaryFilter, sort]);
   const changed = () => { setEntry(false); void onChanged(); };
   return <section className="stock-page" aria-labelledby="stock-title">
     <div className="module-surface stock-header">
@@ -199,8 +206,12 @@ function StockInventory({ title, rows, providers, loading, error, onChanged, foc
         <small>{visible.length} artículos</small>
       </div>
       {loading && !rows.length ? <LoadingState label="Cargando stock" rows={8} /> : <div className="stock-table-wrap">
-        <table className="stock-table">
-          <thead><tr><th>Artículo</th><th>Código</th><th>Medida</th><th>Pendiente de HT</th><th>Listo</th><th>Reservado</th><th>Disponible</th><th scope="col">Acciones</th></tr></thead>
+        <table className="stock-table" data-column-filters="off">
+          <thead><tr>
+            {([["name", "Artículo", false], ["code", "Código", false], ["measure", "Medida", false]] as const).map(([key, label, numeric]) => <th key={key} scope="col" aria-sort={sort?.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}><SortHeader label={label} sortKey={key} sort={sort} onSort={setSort} numeric={numeric} /></th>)}
+            {stockKpis.map(({ field, label }) => <th key={field} scope="col" aria-sort={sort?.key === field ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}><SortHeader label={label} sortKey={field} sort={sort} onSort={setSort} numeric /></th>)}
+            <th scope="col">Acciones</th>
+          </tr></thead>
           <tbody>{visible.map((row) => <tr key={row.product.id}>
             <td><button type="button" onClick={() => setSelectedId(row.product.id)}><strong>{productName(row)}</strong></button></td>
             <td>{row.product.code ?? "—"}</td>

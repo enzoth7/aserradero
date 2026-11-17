@@ -1,5 +1,5 @@
 import { deleteProduct, updateProduct } from "../../store";
-import { parseClassification, parseClientIds, parseHeightCm, parseKind, parseRequiresTreatment } from "../parse";
+import { parseClassification, parseClientIds, parseCommercialActive, parseHeightCm, parseKind, parseRequiresTreatment } from "../parse";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -12,6 +12,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...parseClassification(body),
       heightCm: parseHeightCm(body),
       requiresTreatment: parseRequiresTreatment(body),
+      commercialActive: parseCommercialActive(body),
       stockName: typeof body.stockName === "string" ? body.stockName : undefined,
       code: typeof body.code === "string" ? body.code : undefined,
       clientId: typeof body.clientId === "string" && body.clientId ? body.clientId : undefined,

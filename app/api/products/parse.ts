@@ -27,6 +27,11 @@ export function parseHeightCm(body: Record<string, unknown>): number | null | un
   return body.heightCm;
 }
 
+/** Estado Activo / Inactivo; si no llega, no se cambia. */
+export function parseCommercialActive(body: Record<string, unknown>) {
+  return typeof body.commercialActive === "boolean" ? body.commercialActive : undefined;
+}
+
 /** El tilde viejo "requiere marcado" sigue valiendo si no llega el nivel Tratamiento. */
 export function parseRequiresTreatment(body: Record<string, unknown>) {
   return typeof body.requiresTreatment === "boolean" ? body.requiresTreatment : undefined;

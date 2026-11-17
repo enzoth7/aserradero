@@ -6243,12 +6243,6 @@ table thead th, .column-filter, .column-filter > span,
 .logistics-class-meter-bar { height: 7px; overflow: hidden; border-radius: 999px; background: var(--nav-bg); }
 .logistics-class-meter-bar > span { display: block; width: 100%; height: 100%; border-radius: inherit; background: var(--brand-slate); transform-origin: left; transition: transform 180ms ease; }
 @media (prefers-reduced-motion: reduce) { .logistics-class-meter-bar > span { transition: none; } }
-.logistics-load-volume { display: grid; gap: 7px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.logistics-load-volume > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.logistics-load-volume span, .logistics-load-volume small { color: var(--muted); font-size: 12px; }
-.logistics-load-volume strong { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
-.logistics-load-bar { height: 9px; overflow: hidden; border-radius: 999px; background: var(--nav-bg); }
-.logistics-load-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--brand-slate); transition: width 180ms ease; }
 .logistics-load-status { margin: 0; padding: 11px; border-radius: 9px; background: var(--nav-bg); color: var(--ink-2); font-size: 13px; line-height: 1.4; }
 .logistics-load-status.is-over { background: var(--red-soft); color: var(--red); }
 .logistics-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 4px; border-radius: 12px; background: var(--nav-bg); }
@@ -6472,7 +6466,6 @@ table thead th, .column-filter, .column-filter > span,
 .logistics-config-table th small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; font-weight: 500; }
 .logistics-config-table td { min-width: 0; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; overflow-wrap: anywhere; }
 .logistics-config-table td strong { font-weight: 650; }
-.logistics-volume-value { font-variant-numeric: tabular-nums; font-weight: 650; }
 .logistics-daily-orders { display: block; font-weight: 650; font-variant-numeric: tabular-nums; }
 .logistics-row-actions { display: flex; align-items: center; gap: 8px; }
 .logistics-config-table td .logistics-icon-action { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); cursor: pointer; }
@@ -6608,7 +6601,7 @@ table thead th, .column-filter, .column-filter > span,
 :root {
   --side-rail-compact: 72px;
   --side-rail-expanded: 216px;
-  --side-section-width: 230px;
+  --side-section-width: 192px;
   --side-expand-distance: 144px;
   --side-nav-start: 106px;
 }
@@ -7174,3 +7167,30 @@ table thead th .native-column-filter-trigger:hover, table thead th .native-colum
 /* Recursos: el botón de alta usa .primary-button (amarillo de marca); solo se centra en el encabezado. */
 .production-config-section > header { align-items: center; }
 .resource-add-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; align-self: center; white-space: nowrap; }
+
+/* Encabezados fijos en Stock, Clientes y Catálogo.
+   body con overflow-x:hidden era un contenedor de scroll propio y anulaba position:sticky; clip recorta igual sin serlo. */
+body { overflow-x: clip; }
+.stock-table-surface { overflow: clip; }
+@media (min-width: 761px) {
+  .products-heading, .clients-heading { position: sticky; top: 0; z-index: 20; }
+}
+@media (min-width: 1101px) {
+  .stock-table thead th { position: sticky; top: 0; z-index: 3; }
+}
+@media (min-width: 761px) and (max-width: 1100px) {
+  .stock-table thead { position: sticky; top: 0; z-index: 3; }
+}
+
+/* Encabezado que solo ordena: mismo gesto en todas las tablas (números de mayor a menor, textos de A a Z). */
+.sort-header { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; max-width: 100%; padding: 0 6px; margin-inline: -6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-align: inherit; text-transform: inherit; cursor: pointer; }
+.sort-header > span { min-width: 0; overflow-wrap: anywhere; }
+.sort-header > svg { flex: none; opacity: .55; }
+.sort-header:hover, .sort-header.active { background: rgba(255, 255, 255, .16); }
+.sort-header:hover > svg, .sort-header.active > svg { opacity: 1; }
+.sort-header:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+
+/* Estado Activo / Inactivo: verde y rojo. */
+.status-badge { justify-self: start; min-height: 22px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 650; }
+.status-badge.active { background: #e0f3e8; color: #146c3f; }
+.status-badge.inactive { background: #fde8e8; color: #b3261e; }

@@ -113,6 +113,7 @@ export type UpdateProductInput = {
   requiresTreatment?: boolean;
   stockName?: string;
   code?: string;
+  commercialActive?: boolean;
   clientId?: string;
   clientIds?: string[];
 };
@@ -717,10 +718,10 @@ export async function deleteClient(id: string): Promise<{ ok: boolean }> {
   return { ok: true };
 }
 
-type DbProductRow = { id: string; kind: ProductKind; measure: string | null; height_cm?: number | null; requires_treatment: boolean; stock_name?: string | null; code?: string | null; stock_active?: boolean; attributes?: Record<string, string> | null };
+type DbProductRow = { id: string; kind: ProductKind; measure: string | null; height_cm?: number | null; requires_treatment: boolean; stock_name?: string | null; code?: string | null; stock_active?: boolean; commercial_active?: boolean; attributes?: Record<string, string> | null };
 function mapProduct(row: DbProductRow): Product {
   const attributes = row.attributes != null ? cleanAttributes(row.attributes) : undefined;
-  return { id: row.id, kind: row.kind, measure: row.measure ?? undefined, heightCm: row.kind === "Pallet" ? row.height_cm ?? 10 : row.height_cm ?? undefined, requiresTreatment: row.requires_treatment, stockName: row.stock_name ?? undefined, code: row.code ?? undefined, stockActive: row.stock_active ?? true, ...(attributes !== undefined ? { attributes } : {}) };
+  return { id: row.id, kind: row.kind, measure: row.measure ?? undefined, heightCm: row.kind === "Pallet" ? row.height_cm ?? 10 : row.height_cm ?? undefined, requiresTreatment: row.requires_treatment, stockName: row.stock_name ?? undefined, code: row.code ?? undefined, stockActive: row.stock_active ?? true, commercialActive: row.commercial_active ?? false, ...(attributes !== undefined ? { attributes } : {}) };
 }
 
 type DbClientProductRow = {
@@ -1006,18 +1007,28 @@ export async function createProduct(input: CreateProductInput) {
       body: JSON.stringify({ p_kind: input.kind, p_measure: measure, p_height_cm: heightCm, p_attributes: attributes, p_code: code, p_stock_name: stockName, p_client_ids: clientIds }),
     }).catch(levelsMigrationError);
     await rememberLevelOptions(measure, attributes);
+    if (input.commercialActive !== undefined) await saveCommercialActive(id, input.commercialActive);
     const product = (await getProducts()).find((item) => item.id === id);
     if (!product) throw new Error("El producto se creó pero no pudo recuperarse.");
     return product;
   }
   if (memoryProducts.some((product) => product.code?.toLocaleUpperCase("es") === code)) throw new Error(`Ya existe un producto con el código ${code}.`);
-  const draft = { id: `producto-${crypto.randomUUID()}`, kind: input.kind, measure, heightCm: heightCm ?? undefined, attributes, requiresTreatment, code, stockName } satisfies Product;
+  const draft = { id: `producto-${crypto.randomUUID()}`, kind: input.kind, measure, heightCm: heightCm ?? undefined, attributes, requiresTreatment, code, stockName, commercialActive: input.commercialActive ?? false } satisfies Product;
   const twin = memoryProducts.find((product) => productKey(product) === productKey(draft));
   if (twin) throw new Error(`Ya existe un producto con esa clasificación (código ${twin.code ?? twin.id}).`);
   memoryProducts.push(draft);
   await rememberLevelOptions(measure, attributes);
   for (const clientId of clientIds) await assignClientToProduct(draft.id, clientId);
   return (await getProducts()).find((item) => item.id === draft.id) ?? draft;
+}
+
+/** El estado comercial se guarda aparte de la ficha: no pasa por las funciones de alta y edición del catálogo. */
+async function saveCommercialActive(productId: string, active: boolean) {
+  await supabaseServerRequest<unknown>(`/rest/v1/products?id=eq.${encodeURIComponent(productId)}`, {
+    method: "PATCH",
+    prefer: "return=minimal",
+    body: JSON.stringify({ commercial_active: active }),
+  });
 }
 
 async function assignClientToProduct(productId: string, clientId: string) {
@@ -1075,6 +1086,7 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
       body: JSON.stringify({ p_id: id, p_kind: input.kind, p_measure: measure, p_height_cm: heightCm ?? null, p_height_provided: heightCm !== undefined, p_attributes: attributes, p_code: code ?? null, p_stock_name: stockName ?? null }),
     }).catch(levelsMigrationError);
     await rememberLevelOptions(measure, attributes);
+    if (input.commercialActive !== undefined) await saveCommercialActive(id, input.commercialActive);
     if (input.clientIds) await supabaseServerRequest<boolean>("/rest/v1/rpc/set_product_clients_v1", { method: "POST", body: JSON.stringify({ p_product_id: id, p_client_ids: [...new Set(input.clientIds)] }) });
     else if (input.clientId) await assignClientToProduct(id, input.clientId);
     const products = await getProducts();
@@ -1089,7 +1101,7 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
   const candidate = { ...product, kind: input.kind, measure, attributes, requiresTreatment };
   const twin = memoryProducts.find((item) => item.id !== id && productKey(item) === productKey(candidate));
   if (twin) throw new Error(`Ya existe un producto con esa clasificación (código ${twin.code ?? twin.id}).`);
-  Object.assign(product, { kind: input.kind, measure, attributes, requiresTreatment, ...(heightCm !== undefined ? { heightCm: heightCm ?? undefined } : {}), ...(stockName ? { stockName } : {}), ...(code ? { code } : {}) });
+  Object.assign(product, { kind: input.kind, measure, attributes, requiresTreatment, ...(heightCm !== undefined ? { heightCm: heightCm ?? undefined } : {}), ...(stockName ? { stockName } : {}), ...(code ? { code } : {}), ...(input.commercialActive !== undefined ? { commercialActive: input.commercialActive } : {}) });
   await rememberLevelOptions(measure, attributes);
   if (code) memoryClientProducts.filter((item) => item.productId === id).forEach((item) => { item.code = code; item.product.code = code; });
   if (input.clientIds) {
