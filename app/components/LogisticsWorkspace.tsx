@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AlertTriangle, ArrowUpRight, CalendarClock, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { getOrderRequestedDate, type OperationOrder, type Product, type Provider, type Shipment, type ShipmentStatus } from "../data";
-import { classifyPallet, estimatedTransportVolumeM3, isOutsidePaysanduCity, loadWarnings, palletVolumeM3, tripWarnings, type LineAvailability, type LogisticsClientDeliveryLimit, type LogisticsDriver, type LogisticsLocation, type LogisticsRun, type LogisticsSettings, type LogisticsTransportCapacity, type LogisticsVehicle, type PalletClass } from "../logistics";
+import { classifyPallet, isOutsidePaysanduCity, loadWarnings, tripWarnings, type LineAvailability, type LogisticsClientDeliveryLimit, type LogisticsDriver, type LogisticsLocation, type LogisticsRun, type LogisticsSettings, type LogisticsTransportCapacity, type LogisticsVehicle, type PalletClass } from "../logistics";
 import { AsyncButton, ModalShell, WeekNavigator } from "./ui";
 import { UruguayTravelMap, routeColors, travelBands, travelTimes, type ClientTravelPoint, type MapRoute } from "./LogisticsMap";
 import LogisticsLimitsView from "./LogisticsLimitsView";
@@ -19,7 +19,6 @@ type Snapshot = {
 };
 type View = "transport" | "trips" | "map" | "limits";
 const number = new Intl.NumberFormat("es-UY");
-const volumeNumber = new Intl.NumberFormat("es-UY", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const statusLabel: Record<ShipmentStatus, string> = { planned: "Planificado", ready: "Pronto", loaded: "Cargado", dispatched: "En viaje", delivered: "Entregado", cancelled: "Cancelado" };
 const routeLabel = { viable: "Viable", tight: "Ajustado", not_viable: "No viable", no_data: "Sin datos" };
 const displayProduct = (name: string) => name.replace(/\s*\u00b7\s*/g, ", ");
@@ -123,14 +122,6 @@ function PlanModal({ order, snapshot, onClose, onSaved, onError, initialShipment
   const transportProfile = mode === "external" ? snapshot.transportCapacities.find((item) => item.id === `provider:${providerId}`)
     : mode === "customer_pickup" ? snapshot.transportCapacities.find((item) => item.id === "customer_pickup") : undefined;
   const classCapacity = mode === "internal" ? vehicle : transportProfile;
-  const volumeReference = estimatedTransportVolumeM3(classCapacity?.smallCapacity, classCapacity?.largeCapacity);
-  const selectedLineVolumes = order.lines.filter((line) => (quantities[line.id] || 0) > 0).map((line) => {
-    const product = snapshot.products.find((item) => item.id === line.productId);
-    const volumeM3 = product ? palletVolumeM3(product) : undefined;
-    return volumeM3 === undefined ? undefined : volumeM3 * quantities[line.id];
-  });
-  const selectedVolumeM3 = selectedLineVolumes.some((volume) => volume === undefined)
-    ? undefined : selectedLineVolumes.reduce<number>((sum, volume) => sum + (volume ?? 0), 0);
   const readyQuantity = order.lines.reduce((sum, line) => sum + availableFor(line.id), 0);
   const exceedsReady = order.lines.some((line) => (quantities[line.id] || 0) > availableFor(line.id));
   const confirmedCapacity = Number.isInteger(Number(manualCapacity)) && Number(manualCapacity) > 0 ? Number(manualCapacity) : undefined;
@@ -214,15 +205,13 @@ function PlanModal({ order, snapshot, onClose, onSaved, onError, initialShipment
         {order.lines.some((line) => (quantities[line.id] || 0) > maxFor(line.id)) && <Notice>El plan supera el saldo del pedido. Se guardará la diferencia para conciliarla.</Notice>}
         {warnings.map((warning) => <Notice key={warning}>{warning}</Notice>)}
       </>}
-      </div><aside className="logistics-load-panel" aria-label="Carga y volumen">
-        <h4>Carga y volumen</h4>
+      </div><aside className="logistics-load-panel" aria-label="Carga">
+        <h4>Carga</h4>
         <strong className="logistics-load-source">{mode === "internal" ? vehicle?.name ?? "Vehículo sin elegir" : mode === "external" ? snapshot.providers.find((provider) => provider.id === providerId)?.name ?? "Transportista sin elegir" : "Retira cliente"}</strong>
         <div className="logistics-load-stats"><div><span>Carga elegida</span><strong>{number.format(selectedQuantity)}</strong></div><div><span>Listos para enviar</span><strong>{number.format(readyQuantity)}</strong></div></div>
         <div className="logistics-load-classes"><ClassLoadMeter label="Chicos" count={counts.small} capacity={classCapacity?.smallCapacity} /><ClassLoadMeter label="Grandes" count={counts.large} capacity={classCapacity?.largeCapacity} />{counts.unclassified > 0 && <div className="logistics-load-unclassified"><span>Sin clasificar</span><strong>{number.format(counts.unclassified)}</strong></div>}</div>
-        {selectedQuantity > 0 && <div className="logistics-load-volume"><div><span>Volumen de la carga</span><strong>{selectedVolumeM3 === undefined ? "Sin estimación" : `${volumeNumber.format(selectedVolumeM3)} m³ aprox.`}</strong></div><div><span>Referencia del transporte</span><strong>{volumeReference ? `Hasta ${volumeNumber.format(volumeReference.upper)} m³ aprox.` : "Sin estimación"}</strong></div><small>Estimación según las medidas y alturas de los pallets.</small></div>}
-        {mode === "internal" && selectedVolumeM3 !== undefined && volumeReference && volumeReference.upper > 0 && selectedQuantity > 0 && <div className="logistics-load-bar" role="progressbar" aria-label="Volumen orientativo ocupado" aria-valuemin={0} aria-valuemax={volumeReference.upper} aria-valuenow={Math.min(selectedVolumeM3, volumeReference.upper)} aria-valuetext={`${volumeNumber.format(selectedVolumeM3)} de ${volumeNumber.format(volumeReference.upper)} metros cúbicos aproximados`}><span style={{ width: `${Math.min(selectedVolumeM3 / volumeReference.upper * 100, 100)}%` }} /></div>}
         {capacityLimit !== undefined && mode !== "internal" && <div className="logistics-load-limit"><span>Capacidad indicada</span><strong>{number.format(capacityLimit)}</strong></div>}
-        {(exceedsReady || selectedQuantity > 0 && capacityError || mode === "internal" && !vehicle || mode !== "internal" && capacityLimit === undefined || mode !== "internal" && selectedQuantity > 0 && capacityRemaining !== undefined) && <p className={`logistics-load-status${exceedsReady || selectedQuantity > 0 && capacityError ? " is-over" : ""}`} role="status">{exceedsReady ? "La carga supera los palets listos para enviar. Se puede planificar igual." : selectedQuantity > 0 && capacityError ? `${capacityError} Se puede guardar igual.` : mode === "internal" && !vehicle ? "Elegí un vehículo para ver el volumen orientativo." : capacityRemaining === undefined ? "Indicá la capacidad de esta salida." : capacityRemaining === 0 ? "Capacidad completa." : `Quedan ${number.format(capacityRemaining)} lugares disponibles.`}</p>}
+        {(exceedsReady || selectedQuantity > 0 && capacityError || mode === "internal" && !vehicle || mode !== "internal" && capacityLimit === undefined || mode !== "internal" && selectedQuantity > 0 && capacityRemaining !== undefined) && <p className={`logistics-load-status${exceedsReady || selectedQuantity > 0 && capacityError ? " is-over" : ""}`} role="status">{exceedsReady ? "La carga supera los palets listos para enviar. Se puede planificar igual." : selectedQuantity > 0 && capacityError ? `${capacityError} Se puede guardar igual.` : mode === "internal" && !vehicle ? "Elegí un vehículo para ver su capacidad." : capacityRemaining === undefined ? "Indicá la capacidad de esta salida." : capacityRemaining === 0 ? "Capacidad completa." : `Quedan ${number.format(capacityRemaining)} lugares disponibles.`}</p>}
       </aside></div>
       {error && <p className="logistics-form-message" role="status">{error}</p>}
       <div className="modal-actions"><button type="button" className="secondary-button" onClick={step === 0 ? onClose : () => setStep((step - 1) as 0 | 1)}>{step === 0 ? "Cancelar" : "Volver"}</button>{step < 2 ? <button type="button" className="primary-button" onClick={continueStep}>Continuar</button> : <AsyncButton type="submit" className="primary-button" loading={saving}>Guardar planificación</AsyncButton>}</div>

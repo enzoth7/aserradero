@@ -59,16 +59,22 @@ test("configura capacidades de transporte y parámetros por cliente", async ({ p
   await expect(page.getByRole("searchbox", { name: "Buscar cliente en distancias" })).toHaveCount(0);
   await expect(page.locator(".logistics-config-table .native-column-filter-trigger")).toHaveCount(0);
   const transportTable = page.locator(".logistics-config-table").first();
-  await expect(transportTable.locator("thead th")).toHaveText(["Transporte", "Tipo", "Volumen orientativo (m³)", "Palets grandes por viaje", "Palets chicos por viaje", "Acciones"]);
+  await expect(transportTable.locator("thead th")).toHaveText(["Transporte", "Tipo", "Largo del camión (m)", "Ancho del camión (m)", "Largo de la zorra (m)", "Ancho de la zorra (m)", "Palets grandes por viaje", "Palets chicos por viaje", "Acciones"]);
   const vehicle = transportTable.locator("tbody tr").filter({ hasText: "HOWO grande" });
   await expect(vehicle.getByLabel("HOWO grande, palets grandes por viaje")).toHaveCount(0);
-  await expect(vehicle.locator(".logistics-volume-value")).toHaveText("70,3 a 76,6 m³");
+  await expect(transportTable).not.toContainText("m³");
+  await expect(vehicle.locator("td").nth(2)).toHaveText("7,50 m");
+  await expect(vehicle.locator("td").nth(3)).toHaveText("2,40 m");
+  await expect(vehicle.locator("td").nth(4)).toHaveText("8,00 m");
+  await expect(vehicle.locator("td").nth(5)).toHaveText("2,40 m");
+  await expect(transportTable.locator("tbody tr").filter({ hasText: "Mercedes" })).toHaveCount(0);
   await vehicle.getByRole("button", { name: "Editar capacidad de HOWO grande" }).click();
   await vehicle.getByLabel("HOWO grande, palets grandes por viaje").fill("275");
   await vehicle.getByLabel("HOWO grande, palets chicos por viaje").fill("640");
-  await expect(vehicle.locator(".logistics-volume-value")).toHaveText("70,8 a 76,8 m³");
+  await vehicle.getByLabel("HOWO grande, largo de la zorra en metros").fill("8.5");
   await vehicle.getByRole("button", { name: "Guardar capacidad de HOWO grande" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Capacidad de HOWO grande guardada." })).toBeVisible();
+  await expect(vehicle.locator("td").nth(4)).toHaveText("8,50 m");
   const provider = transportTable.locator("tbody tr").filter({ hasText: "Milton" });
   await provider.getByRole("button", { name: "Editar capacidad de Milton" }).click();
   await provider.getByLabel("Milton, palets grandes por viaje").fill("40");
@@ -136,10 +142,10 @@ test("configura capacidades de transporte y parámetros por cliente", async ({ p
   await dialog.getByLabel("Modalidad").selectOption("external");
   await dialog.getByLabel("Transportista", { exact: true }).selectOption("milton");
   await dialog.getByLabel("Capacidad de esta salida").fill("90");
-  await expect(dialog.getByRole("complementary", { name: "Carga y volumen" })).toContainText("Chicos0");
+  await expect(dialog.getByRole("complementary", { name: "Carga" })).toContainText("Chicos0");
   await dialog.getByRole("button", { name: "Continuar" }).click();
   await dialog.locator(".logistics-line input[type=number]").first().fill("81");
-  await expect(dialog.getByRole("complementary", { name: "Carga y volumen" })).toContainText("La carga supera la capacidad configurada del transportista.");
+  await expect(dialog.getByRole("complementary", { name: "Carga" })).toContainText("La carga supera la capacidad configurada del transportista.");
   // Superar la capacidad del transportista es una advertencia: se puede continuar.
   await dialog.getByRole("button", { name: "Continuar" }).click();
   await expect(dialog.getByRole("heading", { name: "Revisá la salida" })).toBeVisible();
@@ -186,7 +192,7 @@ test("solo planifica palets listos y confirma el transporte después", async ({ 
   const dialog = page.getByRole("dialog", { name: "Asignar transporte" });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator(".modal-heading small")).toHaveCount(0);
-  const capacityPanel = dialog.getByRole("complementary", { name: "Carga y volumen" });
+  const capacityPanel = dialog.getByRole("complementary", { name: "Carga" });
   await expect(capacityPanel).toContainText("Listos para enviar6");
   await expect(dialog.getByRole("heading", { name: "¿Cómo lo vas a transportar?" })).toBeVisible();
   await dialog.getByLabel("Modalidad").selectOption("customer_pickup");
@@ -255,7 +261,7 @@ test("la capacidad de flota propia acompaña la selección de carga", async ({ p
   expect(vehicle).toBeTruthy();
   await page.goto(`/viajes?pedido=${orderId}`);
   const dialog = page.getByRole("dialog", { name: "Asignar transporte" });
-  const panel = dialog.getByRole("complementary", { name: "Carga y volumen" });
+  const panel = dialog.getByRole("complementary", { name: "Carga" });
   await expect(panel).toContainText("Vehículo sin elegir");
   await dialog.getByLabel("Vehículo").selectOption(vehicle.id);
   await expect(panel).toContainText(vehicle.name);
@@ -267,13 +273,12 @@ test("la capacidad de flota propia acompaña la selección de carga", async ({ p
   await dialog.locator(".logistics-line input[type=number]").first().fill("2");
   await expect(panel.locator(".logistics-load-classes")).toContainText(`Chicos2 / ${new Intl.NumberFormat("es-UY").format(vehicle.smallCapacity)}`);
   await expect(smallMeter).toHaveAttribute("aria-valuenow", "2");
-  await expect(panel.locator(".logistics-load-volume")).toContainText("Volumen de la carga0,2 m³ aprox.");
-  await expect(panel.locator(".logistics-load-volume")).toContainText(/Referencia del transporteHasta \d+,\d m³ aprox\./);
-  await expect(panel.getByRole("progressbar", { name: "Volumen orientativo ocupado" })).toBeVisible();
+  await expect(panel.locator(".logistics-load-volume")).toHaveCount(0);
+  await expect(panel).not.toContainText("m³");
   await expect(panel).not.toContainText("lugares disponibles");
 });
 
-test("una carga mixta usa el volumen como guía y se puede guardar sin capacidad adicional", async ({ page, request }) => {
+test("una carga mixta se mide por tamaño de pallet y se puede guardar sin capacidad adicional", async ({ page, request }) => {
   const code = String(Date.now());
   const clientResponse = await request.post("/api/clients", { data: { name: `Mezcla ${code}` } });
   expect(clientResponse.ok()).toBeTruthy();
@@ -307,7 +312,7 @@ test("una carga mixta usa el volumen como guía y se puede guardar sin capacidad
   await expect(quantities).toHaveCount(2);
   await quantities.nth(0).fill("350");
   await quantities.nth(1).fill("220");
-  const panel = dialog.getByRole("complementary", { name: "Carga y volumen" });
+  const panel = dialog.getByRole("complementary", { name: "Carga" });
   const config = await (await request.get("/api/logistics/config")).json();
   const howo = config.vehicles.find((item: { id: string }) => item.id === "howo");
   const smallMeter = panel.getByRole("progressbar", { name: "Palets chicos" });
@@ -322,11 +327,8 @@ test("una carga mixta usa el volumen como guía y se puede guardar sin capacidad
   const reducedScale = await smallMeter.locator("span").evaluate((element) => (element as HTMLElement).style.transform);
   expect(reducedScale).not.toBe(initialScale);
   await quantities.nth(0).fill("350");
-  await expect(panel.locator(".logistics-load-volume")).toContainText("Volumen de la carga78,0 m³ aprox.");
-  const reference = await panel.locator(".logistics-load-volume strong").nth(1).textContent();
-  const referenceM3 = Number(reference?.match(/[\d,]+/)?.[0].replace(",", "."));
-  expect(referenceM3).toBeGreaterThan(0);
-  expect(78).toBeGreaterThan(referenceM3);
+  await expect(panel.locator(".logistics-load-volume")).toHaveCount(0);
+  await expect(panel).not.toContainText("m³");
   await expect(dialog.getByRole("button", { name: "Completar espacio" })).toHaveCount(0);
   await expect(dialog.getByLabel("Capacidad confirmada para esta mezcla")).toHaveCount(0);
   await expect(dialog).not.toContainText("Indicá una capacidad confirmada");

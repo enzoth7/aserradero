@@ -5,10 +5,11 @@ import { supabaseServerRequest } from "../lib/supabase";
 const memory = process.env.DATA_BACKEND === "memory";
 const defaultDrivers: LogisticsDriver[] = [{ id: "susalla", name: "Susalla", active: true }, { id: "giossa", name: "Giossa", active: true }];
 const defaultVehicles: LogisticsVehicle[] = [
-  { id: "howo", name: "HOWO grande", smallCapacity: 638, largeCapacity: 273, active: true },
-  { id: "vw_camion", name: "Volkswagen camión", smallCapacity: 638, largeCapacity: 273, habitualDriverId: "susalla", active: true },
-  { id: "vw_tractor", name: "Volkswagen tractor", smallCapacity: 560, largeCapacity: 251, habitualDriverId: "giossa", active: true },
-  { id: "internacional", name: "Internacional", smallCapacity: 638, largeCapacity: 273, active: true },
+  { id: "howo", name: "HOWO grande", smallCapacity: 638, largeCapacity: 273, lengthM: 7.5, widthM: 2.4, zorraLengthM: 8, zorraWidthM: 2.4, active: true },
+  { id: "vw_camion", name: "Volkswagen camión", smallCapacity: 638, largeCapacity: 273, habitualDriverId: "susalla", lengthM: 7.1, widthM: 2.4, zorraLengthM: 8, zorraWidthM: 2.4, active: true },
+  { id: "vw_tractor", name: "Volkswagen tractor", smallCapacity: 560, largeCapacity: 251, habitualDriverId: "giossa", lengthM: 14.5, widthM: 2.4, active: true },
+  { id: "internacional", name: "Internacional", smallCapacity: 638, largeCapacity: 273, lengthM: 5.5, widthM: 2.4, zorraLengthM: 10, zorraWidthM: 2.4, active: true },
+  { id: "ford", name: "Ford", lengthM: 5.1, widthM: 2.4, active: true },
 ];
 const defaultSettings: LogisticsSettings = { originAddress: "Paysandú, Uruguay", originPrecision: "city" };
 const memoryDrivers = structuredClone(defaultDrivers);
@@ -41,6 +42,7 @@ function runFromRow(row: Row): LogisticsRun {
 function vehicleFromRow(row: Row): LogisticsVehicle {
   return { id: String(row.id), name: String(row.name), smallCapacity: num(row.small_capacity), largeCapacity: num(row.large_capacity),
     habitualDriverId: str(row.habitual_driver_id), lengthM: num(row.length_m), widthM: num(row.width_m),
+    zorraLengthM: num(row.zorra_length_m), zorraWidthM: num(row.zorra_width_m),
     heightM: num(row.height_m), weightT: num(row.weight_t), active: row.active !== false };
 }
 function transportCapacityFromRow(row: Row): LogisticsTransportCapacity {
@@ -141,14 +143,20 @@ export async function saveLogisticsConfig(kind: "settings" | "vehicle" | "driver
     const largeCapacity = num(payload.largeCapacity); const smallCapacity = num(payload.smallCapacity);
     if (largeCapacity !== undefined && smallCapacity !== undefined && largeCapacity > smallCapacity)
       throw new Error("La capacidad mínima no puede superar la máxima.");
+    for (const [label, value] of [["largo del camión", payload.lengthM], ["ancho del camión", payload.widthM],
+      ["largo de la zorra", payload.zorraLengthM], ["ancho de la zorra", payload.zorraWidthM]] as const)
+      if (value !== undefined && value !== null && (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 99))
+        throw new Error(`El ${label} debe ser un número de metros mayor que cero.`);
     const vehicle: LogisticsVehicle = { id, name, smallCapacity, largeCapacity,
       habitualDriverId: str(payload.habitualDriverId), lengthM: num(payload.lengthM), widthM: num(payload.widthM),
+      zorraLengthM: num(payload.zorraLengthM), zorraWidthM: num(payload.zorraWidthM),
       heightM: num(payload.heightM), weightT: num(payload.weightT), active: payload.active !== false };
     if (memory) { updateById(memoryVehicles, id, vehicle, (item) => item.id); return vehicle; }
     await upsert("logistics_vehicles", "id", { id, name, small_capacity: vehicle.smallCapacity ?? null,
       large_capacity: vehicle.largeCapacity ?? null, habitual_driver_id: vehicle.habitualDriverId ?? null,
-      length_m: vehicle.lengthM ?? null, width_m: vehicle.widthM ?? null, height_m: vehicle.heightM ?? null,
-      weight_t: vehicle.weightT ?? null, active: vehicle.active });
+      length_m: vehicle.lengthM ?? null, width_m: vehicle.widthM ?? null,
+      zorra_length_m: vehicle.zorraLengthM ?? null, zorra_width_m: vehicle.zorraWidthM ?? null,
+      height_m: vehicle.heightM ?? null, weight_t: vehicle.weightT ?? null, active: vehicle.active });
     return vehicle;
   }
   if (kind === "transport_capacity") {
@@ -350,8 +358,11 @@ export async function evaluateLogisticsRoute(id: number | string) {
             body: JSON.stringify({ origin_latitude: origin[1], origin_longitude: origin[0] }) });
         }
         const vehicle = config.vehicles.find((item) => item.id === run.vehicleId);
+        // Con zorra, el conjunto mide camión + zorra de largo y el ancho es el mayor de los dos.
+        const combinedLength = vehicle?.lengthM === undefined ? undefined : vehicle.lengthM + (vehicle.zorraLengthM ?? 0);
+        const combinedWidth = vehicle?.widthM === undefined ? undefined : Math.max(vehicle.widthM, vehicle.zorraWidthM ?? 0);
         const restrictions = Object.fromEntries([
-          ["length", vehicle?.lengthM], ["width", vehicle?.widthM], ["height", vehicle?.heightM], ["weight", vehicle?.weightT],
+          ["length", combinedLength], ["width", combinedWidth], ["height", vehicle?.heightM], ["weight", vehicle?.weightT],
         ].filter((pair): pair is [string, number] => typeof pair[1] === "number"));
         const response = await fetch("https://api.openrouteservice.org/v2/directions/driving-hgv/geojson", {
           method: "POST", headers: { Authorization: key, "Content-Type": "application/json" },

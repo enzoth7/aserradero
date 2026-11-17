@@ -174,7 +174,7 @@ export function registerLogisticsTools(server: McpServer, context: ToolContext) 
     title: "Guardar configuración de Logística",
     description: [
       "Crea o actualiza un dato de configuración de Logística según `tipo`; `datos` lleva los campos de ese tipo:",
-      "• vehicle: id, name, smallCapacity (chicos), largeCapacity (grandes), habitualDriverId, lengthM, widthM, heightM, weightT, active.",
+      "• vehicle: id, name, smallCapacity (chicos), largeCapacity (grandes), habitualDriverId, lengthM / widthM (camión, en metros; ancho estándar 2,4), zorraLengthM / zorraWidthM (zorra, en metros), heightM, weightT, active.",
       "• driver: id, name, active.",
       "• settings: originAddress, shiftStart, shiftEnd (HH:MM), breakMinutes, loadMinutes, unloadMinutes, marginMinutes.",
       "• class: productId, palletClass (small | large | unclassified | auto), reason.",

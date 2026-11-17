@@ -885,8 +885,14 @@ test("protege el stock asignado a un pedido al preparar viajes", async () => {
 test("agenda un retiro a proveedor sin stock y muestra ruta sin datos", async () => {
   const before = await (await request("/api/logistics/snapshot")).json();
   assert.deepEqual(before.vehicles.map((item) => [item.id, item.smallCapacity, item.largeCapacity]).sort((a, b) => a[0].localeCompare(b[0])), [
-    ["howo", 638, 273], ["internacional", 638, 273], ["vw_camion", 638, 273], ["vw_tractor", 560, 251],
+    ["ford", undefined, undefined], ["howo", 638, 273], ["internacional", 638, 273], ["vw_camion", 638, 273], ["vw_tractor", 560, 251],
   ]);
+  const dimensions = Object.fromEntries(before.vehicles.map((item) => [item.id, [item.lengthM, item.widthM, item.zorraLengthM, item.zorraWidthM]]));
+  assert.deepEqual(dimensions, {
+    howo: [7.5, 2.4, 8, 2.4], vw_camion: [7.1, 2.4, 8, 2.4], vw_tractor: [14.5, 2.4, undefined, undefined],
+    internacional: [5.5, 2.4, 10, 2.4], ford: [5.1, 2.4, undefined, undefined],
+  });
+  assert.equal(before.vehicles.some((item) => /mercedes|benz/i.test(item.name)), false);
   const provider = before.providers.find((item) => item.type === "Aserradero" || item.type === "Importador");
   assert.ok(provider);
   const response = await request("/api/logistics/runs", { method: "POST", headers: { "content-type": "application/json" },

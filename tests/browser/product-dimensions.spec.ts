@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("el editor calcula superficie y conserva altura sin agregar columnas al catálogo", async ({ page }) => {
+test("el editor calcula superficie y conserva la altura como dato informativo", async ({ page }) => {
   const code = String(Date.now());
   const created = await page.request.post("/api/products", {
     data: { kind: "Pallet", measure: "120 x 100", code: code },
@@ -17,7 +17,6 @@ test("el editor calcula superficie y conserva altura sin agregar columnas al cat
   await expect(dialog.getByRole("textbox", { name: "Largo (cm)" })).toHaveValue("120");
   await expect(dialog.getByLabel("Superficie de base")).toHaveText("1,20 m²");
   await expect(dialog.getByRole("textbox", { name: "Altura (cm)" })).toHaveValue("10");
-  await expect(dialog).not.toContainText("Si queda vacía, Logística usa 10 cm como referencia.");
 
   await dialog.getByRole("textbox", { name: "Ancho (cm)" }).fill("102");
   await dialog.getByRole("textbox", { name: "Largo (cm)" }).fill("122");

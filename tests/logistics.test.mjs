@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { calculateLineAvailability, classifyPallet, estimatedTransportVolumeM3, estimateDailyClientOrders, loadWarnings, palletFootprintM2, palletVolumeM3, tripWarnings } from "../app/logistics.ts";
+import { calculateLineAvailability, classifyPallet, estimateDailyClientOrders, loadWarnings, palletFootprintM2, TRUCK_WIDTH_M, tripWarnings } from "../app/logistics.ts";
 
 test("estima entregas en una jornada contando la vuelta entre pedidos", () => {
   assert.equal(estimateDailyClientOrders(1.85, 60), 5);
@@ -31,18 +31,11 @@ test("clasifica pallets por superficie hasta 1,20 m² y permite excepciones", ()
   assert.equal(classifyPallet(product("sin medida")), "unclassified");
 });
 
-test("estima volumen de cargas completas con referencias y 10 cm de alto", () => {
+test("calcula la superficie de base de un pallet y el ancho estándar de la flota", () => {
   assert.equal(palletFootprintM2("120 x 100"), 1.2);
   assert.equal(palletFootprintM2("220 × 117"), 2.574);
   assert.equal(palletFootprintM2("sin medida"), undefined);
-  assert.equal(palletVolumeM3({ measure: "120 x 100" }), 0.12);
-  assert.equal(palletVolumeM3({ measure: "120 x 100", heightCm: 12 }), 0.144);
-  const howo = estimatedTransportVolumeM3(638, 273);
-  assert.ok(howo);
-  assert.ok(Math.abs(howo.lower - 70.2702) < 0.00001);
-  assert.ok(Math.abs(howo.upper - 76.56) < 0.00001);
-  assert.equal(estimatedTransportVolumeM3(undefined, 273), undefined);
-  assert.equal(estimatedTransportVolumeM3(638, -1), undefined);
+  assert.equal(TRUCK_WIDTH_M, 2.4);
 });
 
 test("la mezcla de tamaños no genera una advertencia de capacidad", () => {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Pencil, Save, X } from "lucide-react";
 import type { Provider } from "../data";
-import { estimatedTransportVolumeM3, estimateDailyClientOrders, isOutsidePaysanduCity, type LogisticsClientDeliveryLimit, type LogisticsLocation, type LogisticsTransportCapacity, type LogisticsVehicle } from "../logistics";
+import { estimateDailyClientOrders, isOutsidePaysanduCity, TRUCK_WIDTH_M, type LogisticsClientDeliveryLimit, type LogisticsLocation, type LogisticsTransportCapacity, type LogisticsVehicle } from "../logistics";
 
 type LimitsSnapshot = {
   vehicles: LogisticsVehicle[];
@@ -14,7 +14,7 @@ type LimitsSnapshot = {
   clientLimits: LogisticsClientDeliveryLimit[];
   limitsSchemaReady: boolean;
 };
-type CapacityDraft = { large: string; small: string };
+type CapacityDraft = { large: string; small: string; length: string; width: string; zorraLength: string; zorraWidth: string };
 type ClientDraft = { distance: string; hours: string; handling: string };
 type TransportRow = {
   key: string; name: string; category: string; source: "vehicle" | "provider" | "customer_pickup";
@@ -22,11 +22,12 @@ type TransportRow = {
 };
 
 function optionalInteger(value: string) { return value.trim() === "" ? undefined : Number(value); }
-function volumeRangeLabel(small?: number, large?: number) {
-  const volume = estimatedTransportVolumeM3(small, large);
-  if (!volume) return "Sin estimación";
-  const format = (value: number) => value.toLocaleString("es-UY", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
-  return volume.upper - volume.lower < 0.05 ? `${format(volume.lower)} m³` : `${format(volume.lower)} a ${format(volume.upper)} m³`;
+function optionalMeters(value: string) { return value.trim() === "" ? undefined : Number(value.trim().replace(",", ".")); }
+function meters(value?: number) { return value === undefined ? "Sin dato" : `${value.toLocaleString("es-UY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m`; }
+function capacityDraftOf(row: { large?: number; small?: number; vehicle?: LogisticsVehicle }): CapacityDraft {
+  return { large: row.large?.toString() ?? "", small: row.small?.toString() ?? "",
+    length: row.vehicle?.lengthM?.toString() ?? "", width: row.vehicle?.widthM?.toString() ?? "",
+    zorraLength: row.vehicle?.zorraLengthM?.toString() ?? "", zorraWidth: row.vehicle?.zorraWidthM?.toString() ?? "" };
 }
 const DEFAULT_HANDLING_MINUTES = 60;
 
@@ -76,9 +77,20 @@ export default function LogisticsLimitsView({ snapshot, reload }: { snapshot: Li
     if ([large, small].some((value) => value !== undefined && (!Number.isInteger(value) || value < 0))) {
       setError("Las capacidades deben ser cantidades enteras no negativas."); return;
     }
+    let dimensions: Pick<LogisticsVehicle, "lengthM" | "widthM" | "zorraLengthM" | "zorraWidthM"> | undefined;
+    if (row.vehicle) {
+      const lengthM = optionalMeters(draft.length); const zorraLengthM = optionalMeters(draft.zorraLength);
+      // El ancho estándar de la flota es 2,4 m: si hay largo y no se indicó el ancho, se completa.
+      const widthM = optionalMeters(draft.width) ?? (lengthM === undefined ? undefined : TRUCK_WIDTH_M);
+      const zorraWidthM = optionalMeters(draft.zorraWidth) ?? (zorraLengthM === undefined ? undefined : TRUCK_WIDTH_M);
+      if ([lengthM, widthM, zorraLengthM, zorraWidthM].some((value) => value !== undefined && (!Number.isFinite(value) || value <= 0 || value > 99))) {
+        setError("Las medidas deben ser metros mayores que cero."); return;
+      }
+      dimensions = { lengthM, widthM, zorraLengthM, zorraWidthM };
+    }
     const body = row.vehicle
-      ? { kind: "vehicle", ...row.vehicle, largeCapacity: large, smallCapacity: small }
-      : { kind: "transport_capacity", source: row.source, providerId: row.providerId, largeCapacity: large, smallCapacity: small };
+      ? { kind: "vehicle", ...row.vehicle, ...dimensions, largeCapacity: large, smallCapacity: small }
+      :{ kind: "transport_capacity", source: row.source, providerId: row.providerId, largeCapacity: large, smallCapacity: small };
     if (await save(row.key, body, `Capacidad de ${row.name} guardada.`)) {
       setCapacityDrafts((current) => { const next = { ...current }; delete next[row.key]; return next; });
       setEditingCapacityKey(null);
@@ -103,20 +115,25 @@ export default function LogisticsLimitsView({ snapshot, reload }: { snapshot: Li
     <header><h2>Límites de logística</h2></header>
     <div className="logistics-limits-sections">
       <section className="logistics-limit-card" aria-labelledby="transport-capacity-title">
-        <div className="logistics-config-heading"><div><h3 id="transport-capacity-title">Capacidad por transporte</h3><small>Máximos por viaje. Volumen orientativo con palets de referencia de 120 × 100 cm y 220 × 117 cm, ambos de 10 cm de alto. No contempla peso ni apilado.</small></div></div>
-        <table className="logistics-config-table logistics-transport-table" data-column-filters="off"><thead><tr><th scope="col">Transporte</th><th scope="col">Tipo</th><th scope="col">Volumen orientativo (m³)</th><th scope="col">Palets grandes por viaje</th><th scope="col">Palets chicos por viaje</th><th scope="col">Acciones</th></tr></thead><tbody>
-          {visibleRows.map((row) => { const draft = capacityDrafts[row.key] ?? { large: row.large?.toString() ?? "", small: row.small?.toString() ?? "" }; const unavailable = !snapshot.limitsSchemaReady && row.source !== "vehicle"; const editing = editingCapacityKey === row.key; return <tr key={row.key}>
+        <div className="logistics-config-heading"><div><h3 id="transport-capacity-title">Capacidad por transporte</h3><small>Máximos por viaje y medidas de cada camión y de su zorra. El ancho estándar es de 2,40 m. No contempla peso ni apilado.</small></div></div>
+        <table className="logistics-config-table logistics-transport-table" data-column-filters="off"><thead><tr><th scope="col">Transporte</th><th scope="col">Tipo</th><th scope="col">Largo del camión (m)</th><th scope="col">Ancho del camión (m)</th><th scope="col">Largo de la zorra (m)</th><th scope="col">Ancho de la zorra (m)</th><th scope="col">Palets grandes por viaje</th><th scope="col">Palets chicos por viaje</th><th scope="col">Acciones</th></tr></thead><tbody>
+          {visibleRows.map((row) => { const draft = capacityDrafts[row.key] ?? capacityDraftOf(row); const unavailable = !snapshot.limitsSchemaReady && row.source !== "vehicle"; const editing = editingCapacityKey === row.key; const setDraftField = (field: keyof CapacityDraft, value: string) => setCapacityDrafts((current) => ({ ...current, [row.key]: { ...draft, [field]: value } })); const dimensionCell = (field: "length" | "width" | "zorraLength" | "zorraWidth", label: string, value?: number) => !row.vehicle ? <output>—</output>
+            : editing ? <input type="number" min="0" step="0.01" aria-label={`${row.name}, ${label}`} value={draft[field]} onChange={(event) => setDraftField(field, event.target.value)} />
+            : <output>{field.startsWith("zorra") && row.vehicle.zorraLengthM === undefined && row.vehicle.zorraWidthM === undefined ? "Sin zorra" : meters(value)}</output>; return <tr key={row.key}>
             <td data-label="Transporte"><strong>{row.name}</strong></td>
             <td data-label="Tipo">{row.category}</td>
-            <td data-label="Volumen orientativo (m³)"><output className="logistics-volume-value">{volumeRangeLabel(editing ? optionalInteger(draft.small) : row.small, editing ? optionalInteger(draft.large) : row.large)}</output></td>
-            <td data-label="Palets grandes por viaje">{editing ? <input type="number" min="0" step="1" aria-label={`${row.name}, palets grandes por viaje`} value={draft.large} onChange={(event) => setCapacityDrafts((current) => ({ ...current, [row.key]: { ...draft, large: event.target.value } }))} /> : <output>{row.large ?? "Sin definir"}</output>}</td>
-            <td data-label="Palets chicos por viaje">{editing ? <input type="number" min="0" step="1" aria-label={`${row.name}, palets chicos por viaje`} value={draft.small} onChange={(event) => setCapacityDrafts((current) => ({ ...current, [row.key]: { ...draft, small: event.target.value } }))} /> : <output>{row.small ?? "Sin definir"}</output>}</td>
+            <td data-label="Largo del camión (m)">{dimensionCell("length", "largo del camión en metros", row.vehicle?.lengthM)}</td>
+            <td data-label="Ancho del camión (m)">{dimensionCell("width", "ancho del camión en metros", row.vehicle?.widthM)}</td>
+            <td data-label="Largo de la zorra (m)">{dimensionCell("zorraLength", "largo de la zorra en metros", row.vehicle?.zorraLengthM)}</td>
+            <td data-label="Ancho de la zorra (m)">{dimensionCell("zorraWidth", "ancho de la zorra en metros", row.vehicle?.zorraWidthM)}</td>
+            <td data-label="Palets grandes por viaje">{editing ? <input type="number" min="0" step="1" aria-label={`${row.name}, palets grandes por viaje`} value={draft.large} onChange={(event) => setDraftField("large", event.target.value)} /> : <output>{row.large ?? "Sin definir"}</output>}</td>
+            <td data-label="Palets chicos por viaje">{editing ? <input type="number" min="0" step="1" aria-label={`${row.name}, palets chicos por viaje`} value={draft.small} onChange={(event) => setDraftField("small", event.target.value)} /> : <output>{row.small ?? "Sin definir"}</output>}</td>
             <td data-label="Acciones"><div className="logistics-row-actions">{editing ? <>
               <button type="button" className="logistics-icon-action" aria-label={`Guardar capacidad de ${row.name}`} title="Guardar" disabled={Boolean(savingKey)} onClick={() => void saveCapacity(row, draft)}><Save size={18} aria-hidden="true" /></button>
               <button type="button" className="logistics-icon-action" aria-label={`Cancelar edición de ${row.name}`} title="Cancelar" disabled={Boolean(savingKey)} onClick={() => { setEditingCapacityKey(null); setCapacityDrafts((current) => { const next = { ...current }; delete next[row.key]; return next; }); }}><X size={18} aria-hidden="true" /></button>
-            </> : <button type="button" className="logistics-icon-action" aria-label={`Editar capacidad de ${row.name}`} title="Editar" disabled={unavailable || Boolean(savingKey)} onClick={() => { setError(""); setEditingCapacityKey(row.key); setCapacityDrafts((current) => ({ ...current, [row.key]: { large: row.large?.toString() ?? "", small: row.small?.toString() ?? "" } })); }}><Pencil size={18} aria-hidden="true" /></button>}</div></td>
+            </> : <button type="button" className="logistics-icon-action" aria-label={`Editar capacidad de ${row.name}`} title="Editar" disabled={unavailable || Boolean(savingKey)} onClick={() => { setError(""); setEditingCapacityKey(row.key); setCapacityDrafts((current) => ({ ...current, [row.key]: capacityDraftOf(row) })); }}><Pencil size={18} aria-hidden="true" /></button>}</div></td>
           </tr>; })}
-          {!visibleRows.length && <tr><td colSpan={6}>No hay transportes configurados.</td></tr>}
+          {!visibleRows.length && <tr><td colSpan={9}>No hay transportes configurados.</td></tr>}
         </tbody></table>
       </section>
       <section className="logistics-limit-card logistics-distance-card" aria-labelledby="client-delivery-title">

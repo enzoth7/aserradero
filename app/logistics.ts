@@ -7,9 +7,11 @@ export type LogisticsMode = "delivery" | "supplier_pickup" | "customer_pickup";
 export type RouteStatus = "viable" | "tight" | "not_viable" | "no_data";
 
 export type LogisticsDriver = { id: string; name: string; active: boolean };
+// Medidas en metros. lengthM/widthM son del camión; zorraLengthM/zorraWidthM, de su zorra (si tiene).
 export type LogisticsVehicle = {
   id: string; name: string; smallCapacity?: number; largeCapacity?: number;
-  habitualDriverId?: string; lengthM?: number; widthM?: number; heightM?: number; weightT?: number; active: boolean;
+  habitualDriverId?: string; lengthM?: number; widthM?: number; zorraLengthM?: number; zorraWidthM?: number;
+  heightM?: number; weightT?: number; active: boolean;
 };
 export type LogisticsTransportCapacity = {
   id: string; kind: "provider" | "customer_pickup"; providerId?: string;
@@ -18,9 +20,8 @@ export type LogisticsTransportCapacity = {
 export type LogisticsClientDeliveryLimit = {
   clientId: string; distanceKm?: number; travelHours?: number; handlingMinutes?: number; routeCheckedAt?: string; ordersPerDay?: number;
 };
-export const PALLET_HEIGHT_ASSUMPTION_M = 0.1;
-export const SMALL_REFERENCE_FOOTPRINT_M2 = 1.2;
-export const LARGE_REFERENCE_FOOTPRINT_M2 = 2.2 * 1.17;
+/** Ancho estándar de camiones y zorras de la flota, en metros. */
+export const TRUCK_WIDTH_M = 2.4;
 
 export function palletDimensionsCm(measure?: string): { lengthCm: number; widthCm: number } | undefined {
   const match = /^(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(?:cm)?$/i.exec(measure?.trim() ?? "");
@@ -36,20 +37,6 @@ export function palletFootprintM2(measure?: string): number | undefined {
   return dimensions ? dimensions.lengthCm * dimensions.widthCm / 10_000 : undefined;
 }
 
-export function palletVolumeM3(product: Pick<Product, "measure" | "heightCm">): number | undefined {
-  const footprintM2 = palletFootprintM2(product.measure);
-  if (footprintM2 === undefined) return undefined;
-  return footprintM2 * (product.heightCm ?? PALLET_HEIGHT_ASSUMPTION_M * 100) / 100;
-}
-
-export function estimatedTransportVolumeM3(smallCapacity?: number, largeCapacity?: number) {
-  if (smallCapacity === undefined || largeCapacity === undefined
-    || !Number.isInteger(smallCapacity) || !Number.isInteger(largeCapacity)
-    || smallCapacity < 0 || largeCapacity < 0) return undefined;
-  const bySmall = smallCapacity * SMALL_REFERENCE_FOOTPRINT_M2 * PALLET_HEIGHT_ASSUMPTION_M;
-  const byLarge = largeCapacity * LARGE_REFERENCE_FOOTPRINT_M2 * PALLET_HEIGHT_ASSUMPTION_M;
-  return { lower: Math.min(bySmall, byLarge), upper: Math.max(bySmall, byLarge) };
-}
 export function estimateDailyClientOrders(oneWayHours?: number, handlingMinutes?: number): number | undefined {
   if (oneWayHours === undefined || !Number.isFinite(oneWayHours) || oneWayHours < 0
     || handlingMinutes === undefined || !Number.isInteger(handlingMinutes) || handlingMinutes < 0) return undefined;
